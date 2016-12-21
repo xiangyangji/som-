@@ -45,8 +45,8 @@ class MM_EnvironmentBase;
 class MM_ObjectAllocationInterface;
 class MM_GCExtensionsBase;
 class MM_Heap;
-class OMR_VM_Example;
-class OMR_VMThread;
+struct OMR_VM_Example;
+struct OMR_VMThread;
 
 //macro to access the heap
 #define _HEAP Heap::GetHeap()

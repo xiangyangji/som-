@@ -44,6 +44,7 @@ public:
     
     virtual inline bool    IsEmpty() const;
     virtual inline void    SetRoutine(PrimitiveRoutine* rtn);
+    virtual int       GetNumberOfMarkableFields() const;
     virtual void    MarkReferences();
     virtual void    SetEmpty(bool value) { empty = value; };
 

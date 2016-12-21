@@ -35,6 +35,7 @@ THE SOFTWARE.
 const int VMBlock::VMBlockNumberOfFields = 2; 
 
 VMBlock::VMBlock() : VMObject(VMBlockNumberOfFields) {
+	 strcpy(objectType,"VMBlock");
 }
 
 void VMBlock::SetMethod(pVMMethod bMethod) {

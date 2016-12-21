@@ -57,6 +57,7 @@ VMMethod::VMMethod(int bcCount, int numberOfConstants, int nof)
     for (int i = 0; i < numberOfConstants ; ++i) {
         this->SetIndexableField(i, nilObject);
     }
+    strcpy(objectType,"VMMethod");
     _HEAP->EndUninterruptableAllocation();
 }
 

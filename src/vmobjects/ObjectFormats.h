@@ -48,4 +48,4 @@ THE SOFTWARE.
 
 
 
-#endif OBJECTFORMATS_H_
+#endif /*OBJECTFORMATS_H_*/

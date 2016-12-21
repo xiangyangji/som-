@@ -31,11 +31,13 @@ const int VMDouble::VMDoubleNumberOfFields = 0;
 
 VMDouble::VMDouble() : VMObject(VMDoubleNumberOfFields) {
     this->embeddedDouble = 0.0f;
+    strcpy(objectType,"VMDouble");
 }
 
 
 VMDouble::VMDouble(double val) : VMObject(VMDoubleNumberOfFields) {
     this->embeddedDouble = val;
+    strcpy(objectType,"VMDouble");
 }
 
 

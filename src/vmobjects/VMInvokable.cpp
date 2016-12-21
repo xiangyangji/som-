@@ -52,5 +52,7 @@ pVMClass VMInvokable::GetHolder()  const {
 
 
 void      VMInvokable::SetHolder(pVMClass hld) {
+//	
+
     holder = hld; 
 }

@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 VMFreeObject::VMFreeObject() : VMObject(0) {
     this->gcfield = -1;
+    strcpy(objectType,"VMFreeObject");
 }
 
 void VMFreeObject::SetNext(VMFreeObject* next) {

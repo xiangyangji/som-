@@ -64,10 +64,12 @@ THE SOFTWARE.
 const int VMClass::VMClassNumberOfFields = 4; 
 
 VMClass::VMClass() : VMObject(VMClassNumberOfFields) {
+	 strcpy(objectType,"VMClass");
 }
 
 
 VMClass::VMClass( int numberOfFields ) : VMObject(numberOfFields + VMClassNumberOfFields) {
+	 strcpy(objectType,"VMClass");
 }
 
 
@@ -121,19 +123,24 @@ pVMSymbol VMClass::GetInstanceFieldName(int index) const {
 
 
 void      VMClass::SetInstanceInvokables(pVMArray invokables) {
-
+//	
 	instanceInvokables = invokables;
-
-    for (int i = 0; i < this->GetNumberOfInstanceInvokables(); ++i) {
+	int numofInvokables  =  this->GetNumberOfInstanceInvokables();
+//	
+    for (int i = 0; i <numofInvokables; ++i) {
+    	//
         pVMObject invo = (*instanceInvokables)[i];
         //check for Nil object
         if (invo != nilObject) {
             //not Nil, so this actually is an invokable
+//        	
             pVMInvokable inv = dynamic_cast<pVMInvokable>(invo);
+//            
             inv->SetHolder(this);
+//            
         }
     }
-
+//    
 }
 
 
@@ -160,6 +167,9 @@ pVMObject VMClass::LookupInvokable(pVMSymbol name) const {
     pVMInvokable invokable = NULL;
     for (int i = 0; i < GetNumberOfInstanceInvokables(); ++i) {
         invokable = (pVMInvokable)(GetInstanceInvokable(i));
+        if( NULL == invokable){
+        	break;
+        }
         if (invokable->GetSignature() == name) 
             return (pVMObject)(invokable);
     }
@@ -373,7 +383,7 @@ void VMClass::setPrimitives(void* dlhandle, const StdString& cname) {
         anInvokable = (pVMInvokable)(this->GetInstanceInvokable(i));
 #ifdef __DEBUG
         cout << "cname: >" << cname << "<"<< endl;
-        cout << an_invokable->GetSignature()->GetStdString() << endl;
+        cout << anInvokable->GetSignature()->GetStdString() << endl;
 #endif
         if(anInvokable->IsPrimitive()) {
 #ifdef __DEBUG

@@ -25,21 +25,45 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
+OMR_DIR=../omr
 
 CC			=g++
 #CFLAGS		=-Wno-endif-labels -O3 $(DBG_FLAGS) $(INCLUDES)
-CFLAGS		=-Wno-endif-labels $(DBG_FLAGS) $(INCLUDES)
+CFLAGS		=-Wno-endif-labels -g $(DBG_FLAGS) $(INCLUDES)
 LDFLAGS		=$(LIBRARIES)
 
-SHAREDFLAGS =-fPIC -mmacosx-version-min=10.4 -undefined dynamic_lookup \
+CFLAGS +=-DUT_DIRECT_TRACE_REGISTRATION -DOSX
+CFLAGS +=-I${SRC_DIR}/somrvm
+CFLAGS +=-I${SRC_DIR}/vmobjects
+CFLAGS +=-I${OMR_DIR}/include_core
+CFLAGS +=-I${OMR_DIR}/gc/include
+CFLAGS +=-I${OMR_DIR}/gc/base
+CFLAGS +=-I${OMR_DIR}/gc/verbose
+CFLAGS +=-I${OMR_DIR}/gc/verbose/handler_standard
+CFLAGS +=-I${OMR_DIR}/gc/stats
+CFLAGS +=-I${OMR_DIR}/gc/structs
+CFLAGS +=-I${OMR_DIR}/gc/base/standard
+CFLAGS +=-I${OMR_DIR}/gc/startup
+CFLAGS +=-I${OMR_DIR}/gc/base/segregated
+
+#SHAREDFLAGS =-fPIC -mmacosx-version-min=10.4 -undefined dynamic_lookup
+#              -dynamiclib -Wl,-single_module -Wl,-Y,1455
+SHAREDFLAGS =-fPIC -undefined dynamic_lookup \
                 -dynamiclib -Wl,-single_module -Wl,-Y,1455
+		
+OMR_LIBS =-L. -L${OMR_DIR} -L${OMR_DIR}/lib -Xlinker -lj9omr \
+-lomrgcbase -lomrgcstructs -lomrgcstats -lomrgcstandard -lomrgcstartup \
+ -lj9hookstatic -lj9prtstatic -lj9thrstatic -lomrgcverbose -lomrgcverbosehandlerstandard \
+  -lomrutil -lj9avl -lj9hashtable \
+ -lj9pool -lomrtrace -lomrvmstartup -Xlinker -lm -lpthread -lc -ldl -lutil -liconv
+#-g -lrt
 
 INSTALL		=install
 
 CSOM_LIBS	=
 CORE_LIBS	=-lm
 
-CSOM_NAME	=SOM++
+CSOM_NAME	=somr
 CORE_NAME	=SOMCore
 PRIMITIVESCORE_NAME  =PrimitiveCore
 #SHARED_EXTENSION    =dll
@@ -65,6 +89,7 @@ MEMORY_DIR 		= $(SRC_DIR)/memory
 MISC_DIR 		= $(SRC_DIR)/misc
 VM_DIR 			= $(SRC_DIR)/vm
 VMOBJECTS_DIR 	= $(SRC_DIR)/vmobjects
+GLUE_DIR        = $(SRC_DIR)/somrvm
 
 COMPILER_SRC	= $(wildcard $(COMPILER_DIR)/*.cpp)
 COMPILER_OBJ	= $(COMPILER_SRC:.cpp=.o)
@@ -78,6 +103,12 @@ VM_SRC			= $(wildcard $(VM_DIR)/*.cpp)
 VM_OBJ			= $(VM_SRC:.cpp=.o)
 VMOBJECTS_SRC	= $(wildcard $(VMOBJECTS_DIR)/*.cpp)
 VMOBJECTS_OBJ	= $(VMOBJECTS_SRC:.cpp=.o)
+
+GLUE_SRC			= $(wildcard $(GLUE_DIR)/*.cpp)
+
+GLUE_SRC			+= $(wildcard $(GLUE_DIR)/*.c)
+GLUE_OBJ1			= $(GLUE_SRC:.cpp=.o)
+GLUE_OBJ			+= $(GLUE_OBJ1:.c=.o)
 
 MAIN_SRC		= $(wildcard $(SRC_DIR)/*.cpp)
 #$(SRC_DIR)/Main.cpp
@@ -105,18 +136,18 @@ LIBRARIES		=-L$(ROOT_DIR)
 ############## Collections.
 
 CSOM_OBJ		=  $(MEMORY_OBJ) $(MISC_OBJ) $(VMOBJECTS_OBJ) \
-				$(COMPILER_OBJ) $(INTERPRETER_OBJ) $(VM_OBJ)
+				$(COMPILER_OBJ) $(INTERPRETER_OBJ) $(VM_OBJ) $(GLUE_OBJ)
 
 OBJECTS			= $(CSOM_OBJ) $(PRIMITIVESCORE_OBJ) $(PRIMITIVES_OBJ) $(MAIN_OBJ)
 
 SOURCES			=  $(COMPILER_SRC) $(INTERPRETER_SRC) $(MEMORY_SRC) \
 				$(MISC_SRC) $(VM_SRC) $(VMOBJECTS_SRC)  \
-				$(PRIMITIVES_SRC) $(PRIMITIVESCORE_SRC) $(MAIN_SRC)
+				$(PRIMITIVES_SRC) $(PRIMITIVESCORE_SRC) $(GLUE_SRC) $(MAIN_SRC) 
 
 ############# Things to clean
 
 CLEAN			= $(OBJECTS) \
-				$(DIST_DIR) $(DEST_DIR) CORE SOM++ \
+				$(DIST_DIR) $(DEST_DIR) CORE $(CSOM_NAME) \
 			$(CSOM_NAME).$(SHARED_EXTENSION)  $(PRIMITIVESCORE_NAME).$(SHARED_EXTENSION) $(ST_DIR)/$(CORE_NAME).csp
 ############# Tools
 
@@ -153,6 +184,9 @@ profiling: all
 	$(CC) $(CFLAGS) -c $< -o $*.o
 
 clean:
+#	@echo *****GLUE_DIR=$(GLUE_DIR)
+#	@echo *****GLUE_SRC=$(GLUE_SRC)
+#	@echo *****GLUE_OBJ=$(GLUE_OBJ1)
 	rm -Rf $(CLEAN)
 
 
@@ -164,27 +198,29 @@ clean:
 #
 
 $(CSOM_NAME): $(CSOM_NAME).$(SHARED_EXTENSION) $(MAIN_OBJ)
-	@echo Linking $(CSOM_NAME) loader
+	@echo =====Linking $(CSOM_NAME) loader
 	$(CC) $(LDFLAGS) \
-		-o $(CSOM_NAME) $(MAIN_OBJ) $(CSOM_NAME).$(SHARED_EXTENSION) -ldl
-	@echo loader done.
+		-o $(CSOM_NAME) $(MAIN_OBJ) $(CSOM_NAME).$(SHARED_EXTENSION) -ldl $(OMR_LIBS)
+	@echo =====CSOM done.
 
 $(CSOM_NAME).$(SHARED_EXTENSION): $(CSOM_OBJ)
-	@echo Linking $(CSOM_NAME) Dynamic Library
+	@echo =====Linking $(CSOM_NAME) Dynamic Library
+#	@echo CSOM_OBJ=$(CSOM_OBJ)
+#	@echo CSOM_LIBS=$(CSOM_LIBS)
 	$(CC) $(LDFLAGS) $(SHAREDFLAGS) \
-		-o $(CSOM_NAME).$(SHARED_EXTENSION) $(CSOM_OBJ) $(CSOM_LIBS)
-	@echo CSOM done.
+		-o $(CSOM_NAME).$(SHARED_EXTENSION) $(CSOM_OBJ) $(CSOM_LIBS) $(OMR_LIBS)
+	@echo =====$(CSOM_NAME).$(SHARED_EXTENSION) done.
 
 $(PRIMITIVESCORE_NAME).$(SHARED_EXTENSION): $(CSOM_NAME) $(PRIMITIVESCORE_OBJ)
-	@echo Linking PrimitivesCore lib
+	@echo =====Linking PrimitivesCore lib
 	$(CC) $(LDFLAGS) $(SHAREDFLAGS) \
 		-o $(PRIMITIVESCORE_NAME).$(SHARED_EXTENSION) \
 		$(PRIMITIVESCORE_OBJ)
 	@touch $(PRIMITIVESCORE_NAME).$(SHARED_EXTENSION)
-	@echo PrimitivesCore done.
+	@echo =====PrimitivesCore done.
 
 CORE: $(CSOM_NAME) $(PRIMITIVESCORE_OBJ) $(PRIMITIVES_OBJ)
-	@echo Linking SOMCore lib
+	@echo =====Linking SOMCore lib
 	$(CC) $(LDFLAGS)  \
 		$(SHAREDFLAGS) -o $(CORE_NAME).csp \
 		$(PRIMITIVES_OBJ) \
@@ -192,7 +228,7 @@ CORE: $(CSOM_NAME) $(PRIMITIVESCORE_OBJ) $(PRIMITIVES_OBJ)
 		$(CORE_LIBS)
 	mv $(CORE_NAME).csp $(ST_DIR)
 	@touch CORE
-	@echo SOMCore done.
+	@echo =====SOMCore done.
 
 install: all
 	@echo installing CSOM into build
@@ -220,3 +256,13 @@ test: all
 #
 bench: all
 	./$(CSOM_NAME) -cp ./Smalltalk ./Examples/Benchmarks/All.som
+omr:
+	make -C $(OMR_DIR)
+omrclean:
+	make clean -C $(OMR_DIR)
+somrall:
+	make -C $(OMR_DIR)
+	make
+somrallclean:
+	make clean -C $(OMR_DIR)
+	make clean

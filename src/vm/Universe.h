@@ -117,9 +117,9 @@ public:
     pVMArray      NewArrayList(ExtendedList<pVMObject>& list) const;
     pVMArray      NewArrayFromArgv(const vector<StdString>&) const;
     pVMBlock      NewBlock(pVMMethod, pVMFrame, int);
-    pVMClass      NewClass(pVMClass) const;
-    pVMFrame      NewFrame(pVMFrame, pVMMethod) const;
-    pVMMethod     NewMethod(pVMSymbol, size_t, size_t) const;
+    pVMClass      NewClass(pVMClass) ;
+    pVMFrame      NewFrame(pVMFrame, pVMMethod) ;
+    pVMMethod     NewMethod(pVMSymbol, size_t, size_t) ;
     pVMObject     NewInstance(pVMClass) const;
     pVMInteger    NewInteger(int32_t) const;
     pVMBigInteger NewBigInteger(int64_t) const;
@@ -129,13 +129,14 @@ public:
     pVMSymbol     NewSymbol(const StdString&);
     pVMString     NewString(const char*) const;
     pVMSymbol     NewSymbol(const char*);
-    pVMClass      NewSystemClass(void) const;
+    pVMClass      NewSystemClass(void) ;
 
     void          InitializeSystemClass(pVMClass, pVMClass, const char*);
 
     pVMObject     GetGlobal(pVMSymbol);
     void          SetGlobal(pVMSymbol name, pVMObject val);
-    bool          HasGlobal(pVMSymbol);
+   // bool          HasGlobal(pVMSymbol);
+    pVMObject HasGlobal(pVMSymbol);
     void          InitializeGlobals();
     pVMClass      GetBlockClass(void) const;
     pVMClass      GetBlockClassWithArgs(int);
@@ -164,7 +165,8 @@ private:
     void initialize(int, char**);
 
 	Heap* heap;
-    int heapSize;
+	uintptr_t heapSize;
+	//int heapSize;
 	map<pVMSymbol, pVMObject> globals;
     vector<StdString> classPath;
     

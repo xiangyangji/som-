@@ -32,16 +32,38 @@ THE SOFTWARE.
 #include "Heap.h"
 
 #include "../vmobjects/VMObject.h"
+#include "../vmobjects/VMSymbol.h"
+
+
 #include "../vmobjects/VMFreeObject.h"
 
 #include "../vm/Universe.h"
+
+
+#include "omrport.h"
+#include "ModronAssertions.h"
+/* OMR Imports */
+#include "AllocateDescription.hpp"
+#include "CollectorLanguageInterfaceImpl.hpp"
+#include "ConfigurationLanguageInterfaceImpl.hpp"
+#include "EnvironmentBase.hpp"
+#include "GCExtensionsBase.hpp"
+#include "GlobalCollector.hpp"
+#include "ObjectAllocationInterface.hpp"
+#include "ObjectModel.hpp"
+#include "omr.h"
+#include "omrgcstartup.hpp"
+#include "omrvm.h"
+#include "StartupManagerImpl.hpp"
+#include "omrExampleVM.hpp"
+#include "Heap.hpp"
 
 /*
  * macro for padding - only word-aligned memory must be allocated
  */
 #define PAD_BYTES(N) ((sizeof(void*) - ((N) % sizeof(void*))) % sizeof(void*))
 
-Heap* Heap::theHeap = NULL;
+Heap * Heap::theHeap = NULL;
 
 Heap* Heap::GetHeap() {
     if (!theHeap) {
@@ -50,50 +72,71 @@ Heap* Heap::GetHeap() {
     return theHeap;
 }
 
-void Heap::InitializeHeap( int objectSpaceSize ) {
+void Heap::InitializeHeap( int objectSpaceSize,OMR_VM_Example * vm ) {
     if (theHeap) {
         cout << "Warning, reinitializing already initialized Heap, " 
              << "all data will be lost!" << endl;
-        delete theHeap;
+       delete theHeap;
+        //TODO: delete it from OMR heap?
     }
-    theHeap = new Heap(objectSpaceSize);
+
+    theHeap = new Heap(objectSpaceSize,vm);
 }
 
 void Heap::DestroyHeap() {
-    if (theHeap) delete theHeap;
+    //if (theHeap) delete theHeap;
+	//zg.Do nothing here , as we would shutdown the OMR in Universe::Quit() routine.
 }
 
+//zg.20160903.0012.Trying to merge code with OMR. Using the extensions->heap to replace the theHeap.
 
+Heap::Heap(uintptr_t objectSpaceSize,OMR_VM_Example *vm) {
+	_vm = vm;
 
-Heap::Heap(int objectSpaceSize) {
-	objectSpace = malloc(objectSpaceSize);
-	if (!objectSpace) {
-		std::cout << "Failed to allocate the initial "<< objectSpaceSize 
-                  << " bytes for the Heap. Panic.\n" << std::endl;
-		exit(1);
+	omr_error_t rc = OMR_ERROR_NONE;
+	/* Initialize heap and collector */
+	{//TODO: Why can not new it ? with a static operator new overriding.? Using the default 1M-2M
+		/* This has to be done in local scope because MM_StartupManager has a destructor that references the OMR VM */
+//		MM_StartupManagerImpl * strMgr = NULL;
+//		if(objectSpaceSize >= 2*1024*1024){
+//			strMgr = new  MM_StartupManagerImpl(_vm->_omrVM,objectSpaceSize);
+//		}else{
+//			strMgr = new  MM_StartupManagerImpl(_vm->_omrVM);
+//		}
+		MM_StartupManagerImpl  strMgr (_vm->_omrVM);
+		rc = OMR_GC_IntializeHeapAndCollector(_vm->_omrVM, &strMgr);
 	}
-	memset(objectSpace, 0, objectSpaceSize);
-	sizeOfFreeHeap = objectSpaceSize;
-	this->objectSpaceSize = objectSpaceSize;
-	this->buffersizeForUninterruptable = (int) (objectSpaceSize * 0.1);
-    
-    uninterruptableCounter = 0;
-	numAlloc = 0;
-    spcAlloc = 0;
-    numAllocTotal = 0;
-    freeListStart = (VMFreeObject*) objectSpace;
-    freeListStart->SetObjectSize(objectSpaceSize);
-    freeListStart->SetNext(NULL);
-    freeListStart->SetPrevious(NULL);
-    freeListStart->SetGCField(-1);
-	/*freeListStart = (FreeListEntry*) objectSpace;
-	freeListStart->size = objectSpaceSize;
-	freeListStart->next = NULL;*/
-	gc = new GarbageCollector(this);
+	Assert_MM_true(OMR_ERROR_NONE == rc);
+
+	/* Attach current thread to the VM */
+	rc = OMR_Thread_Init(_vm->_omrVM, NULL, &omrVMThread, "GCTestMailThread");
+	Assert_MM_true(OMR_ERROR_NONE == rc);
+
+	/* Kick off the dispatcher therads */
+	rc = OMR_GC_InitializeDispatcherThreads(omrVMThread);
+	Assert_MM_true(OMR_ERROR_NONE == rc);
+
+	OMRPORT_ACCESS_FROM_OMRVM(_vm->_omrVM);
+	omrtty_printf("VM/GC INITIALIZED\n");
+	uninterruptableCounter = 0;
+	_vmthread = omrVMThread;
+	/* Do stuff */
+
+	env = MM_EnvironmentBase::getEnvironment(_vmthread);
+	allocationInterface = env->_objectAllocationInterface;
+	extensions = env->getExtensions();
+	omrHeap = extensions ->getHeap();
+	omrtty_printf("configuration is %s\n", extensions->configuration->getBaseVirtualTypeId());
+	omrtty_printf("collector interface is %s\n", env->getExtensions()->collectorLanguageInterface->getBaseVirtualTypeId());
+	omrtty_printf("garbage collector is %s\n", env->getExtensions()->getGlobalCollector()->getBaseVirtualTypeId());
+	omrtty_printf("allocation interface is %s\n", allocationInterface->getBaseVirtualTypeId());
+	 numAlloc = 0;
 }
 
 Heap::~Heap() {
+	/*zg. Do nothing now.
     if (gcVerbosity > 0) {
+
         cout << "-- Heap statistics --" << endl;
         cout << "Total number of allocations: " << numAllocTotal << endl;
         cout << "Number of allocations since last collection: " 
@@ -107,17 +150,23 @@ Heap::~Heap() {
         gc->PrintGCStat();
     }
 	free(objectSpace);
-    
+    */
 }
 
-VMObject* Heap::AllocateObject(size_t size) {
-    //add padding, so objects are word aligned
-    size_t paddedSize = size + PAD_BYTES(size);
-    VMObject* vmo = (VMObject*) Allocate(paddedSize);
+VMObject* Heap::AllocateObject(size_t s) {
+//	
+	uintptr_t size = extensions->objectModel.adjustSizeInBytes(s);
+	//
+	if( size < s){//Impossible,.
+		printf("zg.ERROR!!%s,%s,%s\n",__FILE__,__FUNCTION__,__LINE__);
+		exit(1);
+	}
+    VMObject* vmo = (VMObject*) Allocate(size);
+    if(vmo != NULL){
+    vmo->SetObjectSize(s);  //zg. save the requested size.
+    //TODO: How to do so? zg.add this object into the objectTable.??How to define the name of it.
 
-    ++numAlloc;
-    ++numAllocTotal;
-    spcAlloc += paddedSize;
+    }
     return vmo;
 }
 
@@ -127,85 +176,29 @@ void* Heap::Allocate(size_t size) {
         //this will never happen, as all allocation is done for VMObjects
         return internalAllocate(size);
     }
+
+	uintptr_t allocatedFlags = 0;
+	MM_AllocateDescription mm_allocdescription(size, allocatedFlags, true, true);
+	//omrobjectptr_t obj = (omrobjectptr_t)allocationInterface->allocateObject(env, &mm_allocdescription, env->getMemorySpace(), false);
+	omrobjectptr_t obj = (omrobjectptr_t)allocationInterface->allocateObject(env, &mm_allocdescription, env->getMemorySpace(), true);
+
+	if (NULL != obj) {
+		extensions->objectModel.setObjectSize(obj, mm_allocdescription.getBytesRequested());
+        addUninterruptableAllocationObject(obj);      // TODD @A1A Begin
+		//((VMObject *) obj )->SetObjectSize(size);   //zg. no need to set.  as it's already in the first word( 4 bytes) .  The first byte is reserved for age&flag, and the remains 3 bytes are for size.
+	}else{
+		std::cout <<"ERROR: allocation failure."<<std::endl;
+	}
+
+
+
 #ifdef HEAPDEBUG 
     std::cout << "allocating: " << (int)size << "bytes" << std::endl;
 #endif
-    //if there is not enough free heap size and we are not inside an uninterruptable
-    //section of allocation, start garbage collection
-	if (sizeOfFreeHeap <= buffersizeForUninterruptable &&
-		uninterruptableCounter <= 0)  {
-#ifdef HEAPDEBUG
-        cout << "Not enough free memory, only: " << sizeOfFreeHeap 
-             << " bytes left." << endl
-             << "Starting Garbage Collection" << endl;
-#endif
-		gc->Collect();
-        
-        //
-        //reset allocation stats
-        //
-        numAlloc = 0;
-        spcAlloc = 0;
-	}
-	
-	VMObject* result = NULL;
-    VMFreeObject* cur = freeListStart;
-    VMFreeObject* last = NULL;
-    while(cur->GetObjectSize() != size &&
-          cur->GetObjectSize() < size+sizeof(VMObject) &&
-          cur->GetNext() != NULL) {
-              last = cur;
-              cur = cur->GetNext();
-    }
-    if (cur->GetObjectSize() == size) {
-        //perfect fit
-        if (cur == freeListStart) {
-            freeListStart = cur->GetNext();
-            freeListStart->SetPrevious(NULL);
-        } else {
-            last->SetNext(cur->GetNext());
-            cur->GetNext()->SetPrevious(last);
-        }
-        result = cur;
-    } else if (cur->GetObjectSize() >= size + sizeof(VMFreeObject)) {
-        //found an entry that is big enough
-        int oldSize = cur->GetObjectSize();
-        VMFreeObject* oldNext = cur->GetNext();
-        result = cur;
-        VMFreeObject* replaceEntry = (VMFreeObject*) ((uintptr_t)cur + size);
-        replaceEntry->SetObjectSize(oldSize - size);
-        replaceEntry->SetGCField(-1);
-        replaceEntry->SetNext(oldNext);
-        if (cur == freeListStart) {
-            freeListStart = replaceEntry;
-            freeListStart->SetPrevious(NULL);
-        } else {
-            last->SetNext(replaceEntry);
-            replaceEntry->SetPrevious(last);
-        }
-    } else {
-        //problem... might lose data here
-        cout << "Not enough heap, data loss is possible" << endl;
-        gc->Collect();
-        this->numAlloc = 0;
-        this->spcAlloc = 0;
-        result = (VMObject*)this->Allocate(size);
-    }
-
-    if (result == NULL) {
-        cout << "alloc failed" << endl;
-        PrintFreeList();
-        _UNIVERSE->ErrorExit("Failed to allocate");
-    }
-
-    memset((void *)result, 0, size);
-    result->SetObjectSize(size);
-    this->sizeOfFreeHeap -= size;
-
-    return result;
+    return (void *) obj;
     
 }
-
+/*
 void Heap::PrintFreeList() {
     VMFreeObject* curEntry = freeListStart;
     int i =0;
@@ -215,26 +208,36 @@ void Heap::PrintFreeList() {
         curEntry = curEntry->GetNext();
     }
 }
-
+*/
 void Heap::FullGC() {
-    gc->Collect();
+	//TODO: How to do  manual GC on OMR?
+   //OMR_GC_SystemCollect();
+	extensions->heap->systemGarbageCollect(env,J9MMCONSTANT_EXPLICIT_GC_SYSTEM_GC);
+	//From Liu Yan: TODO
+//	MM_MemorySpace *memorySpace = env->getMemorySpace();
+//	    memorySpace->localGarbageCollect(env);
+   // gc->Collect();
 }
 
 void Heap::Free(void* ptr) {
-    if ( ((uintptr_t)ptr < (uintptr_t) this->objectSpace) &&
-        ((uintptr_t)ptr > (uintptr_t) this->objectSpace + this->objectSpaceSize)) {
+	//TODO: how to check whether one ptr is in OMR heap or not?
+	/*
+    if ( ((int)ptr < (int) this->objectSpace) &&
+        ((int)ptr > (int) this->objectSpace + this->objectSpaceSize)) {
         internalFree(ptr);
     }
+    */
 }
 
 void Heap::Destroy(VMObject* _object) {
-    
+	//todo: How to destroy one object from OMR heap?
+	/*
     int freedBytes = _object->GetObjectSize();
-    memset((void *)_object, 0, freedBytes);
+    memset(_object, 0, freedBytes);
     VMFreeObject* object = (VMFreeObject*) _object;
 
     //see if there's an adjoining unused object behind this object
-    VMFreeObject* next = (VMFreeObject*)((uintptr_t)object + (int)freedBytes);
+    VMFreeObject* next = (VMFreeObject*)((int)object + (int)freedBytes);
     if (next->GetGCField() == -1) {
         //yes, there is, so we can join them
         object->SetObjectSize(next->GetObjectSize() + freedBytes);
@@ -242,14 +245,15 @@ void Heap::Destroy(VMObject* _object) {
         next->GetNext()->SetPrevious(object);
         VMFreeObject* previous = next->GetPrevious();
         object->SetPrevious(previous);
-        memset((void *)next, 0, next->GetObjectSize());
+        memset(next, 0, next->GetObjectSize());
     } else {
         //no, there is not, so we just put the new unused object as the new freeListStart
         object->SetObjectSize(freedBytes);
         object->SetNext(freeListStart);
         freeListStart->SetPrevious(object);
         freeListStart = object;
-    }
+    }*/
+
     //TODO: find a way to merge unused objects that are before this object
 }
 
@@ -267,3 +271,18 @@ void* Heap::internalAllocate(size_t size) {
     memset(result, 0, size);
     return result;
 }
+
+// TODD @A1A Begin
+void Heap::StartUninterruptableAllocation() 
+{ 
+    ++uninterruptableCounter; 
+}
+
+
+void Heap::EndUninterruptableAllocation() 
+{   
+    if( (--uninterruptableCounter) == 0 )
+    {   removeAllUninterruptableAllocationObject();        
+    }
+}
+// TODD @A1A End

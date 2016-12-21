@@ -28,31 +28,31 @@ THE SOFTWARE.
 ObjectSizeTest = (
 
     run: harness = (
-        Object new objectSize / 4 = 6
+        Object new objectSize / 8 = 9
             ifFalse: [
                 harness
                     fail: self
-                    because: 'Plain object does not have size 6.' ].
-        42 objectSize / 4 = 7
+                    because: 'Plain object does not have size 9.' ].
+        42 objectSize / 8 = 10
             ifFalse: [
                 harness
                     fail: self
-                    because: 'Integer object does not have size 7.' ].
-        'hello' objectSize / 4 = 9
+                    because: 'Integer object does not have size 10.' ].
+        'hello' objectSize / 8 = 10
             ifFalse: [
                 harness
                     fail: self
-                    because: 'hello String object does not have size 9.' ].
-        Array new objectSize / 4 = 6
+                    because: 'hello String object does not have size 10.' ].
+        Array new objectSize / 8 = 9
             ifFalse: [
                 harness
                     fail: self
-                    because: 'Empty array object does not have size 6.' ].
-        (Array new: 4) objectSize / 4 = 10
+                    because: 'Empty array object does not have size 9.' ].
+        (Array new: 4) objectSize / 8 = 13
             ifFalse: [
                 harness
                     fail: self
-                    because: 'Array object (length 4) does not have size 10.' ].
+                    because: 'Array object (length 4) does not have size 13.' ].
     )
     
 )

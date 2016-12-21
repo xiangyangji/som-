@@ -358,7 +358,7 @@ void Disassembler::DumpBytecode(pVMFrame frame, pVMMethod method, int bc_idx) {
                 
                 c_cname = cname->GetChars();
             } else
-                c_cname = "NULL";
+                c_cname = (char *) "NULL";
             
             DebugPrint("(index: %d)value: %s <(%s) ", BC_1,
                         name->GetChars(), c_cname);

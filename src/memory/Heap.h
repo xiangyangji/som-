@@ -31,14 +31,22 @@ THE SOFTWARE.
 
 #include <vector>
 
-#include "GarbageCollector.h"
+//#include "GarbageCollector.h"
 
 #include "../misc/defs.h"
 
 #include "../vmobjects/ObjectFormats.h"
 
+
+
 class VMObject;
 class VMFreeObject;
+class MM_EnvironmentBase;
+class MM_ObjectAllocationInterface;
+class MM_GCExtensionsBase;
+class MM_Heap;
+class OMR_VM_Example;
+class OMR_VMThread;
 
 //macro to access the heap
 #define _HEAP Heap::GetHeap()
@@ -48,36 +56,47 @@ struct FreeListEntry
     size_t size;
 } ;
 
+extern OMR_VMThread * omrVMThread;
+
 
 class Heap
 {
-	friend class GarbageCollector;
+	//friend class GarbageCollector;
 
 public:
     static Heap* GetHeap();
-    static void InitializeHeap(int objectSpaceSize = 1048576);
+    static void InitializeHeap(int objectSpaceSize = 1048576,OMR_VM_Example *vm=NULL);
     static void DestroyHeap();
-	Heap(int objectSpaceSize = 1048576);
+	Heap(uintptr_t objectSpaceSize = 1048576,OMR_VM_Example *vm=NULL);
+
 	~Heap();
     VMObject* AllocateObject(size_t size);
 	void* Allocate(size_t size);
     void Free(void* ptr);
 	void Destroy(VMObject*);
 	
-    void StartUninterruptableAllocation() { ++uninterruptableCounter; } ;
-    void EndUninterruptableAllocation() { --uninterruptableCounter; } ;
+    void StartUninterruptableAllocation();  // TODD @A1M: Enhance UninterruptableXXX functions to prevent  
+    void EndUninterruptableAllocation();    // the new allocated memory being deleted - 11/06/2016
 
-    void PrintFreeList();
+   // void PrintFreeList();
     
     void FullGC();
-	
+    OMR_VM_Example * getVM(){return _vm;}
     
 private:
-    static Heap* theHeap;
+    static class Heap * theHeap;
 
     void internalFree(void* ptr);
 	void* internalAllocate(size_t size);
-
+	int uninterruptableCounter;
+	OMR_VM_Example * _vm;
+	OMR_VMThread * _vmthread ;
+	MM_Heap * omrHeap;
+	MM_EnvironmentBase *env;
+	MM_ObjectAllocationInterface *allocationInterface;
+	MM_GCExtensionsBase *extensions ;
+	uint32_t numAlloc;
+	/* zg. This class is just a wrapper of extensions->heap.
 	void* objectSpace;
 
 	VMFreeObject* freeListStart;
@@ -86,7 +105,7 @@ private:
 	
     int objectSpaceSize;
 	int buffersizeForUninterruptable;
-	int uninterruptableCounter;
+
 	int sizeOfFreeHeap;
 
 	GarbageCollector* gc;
@@ -94,6 +113,7 @@ private:
     uint32_t numAlloc;
     uint32_t spcAlloc;
     uint32_t numAllocTotal;
+    */
 };
 
 #endif

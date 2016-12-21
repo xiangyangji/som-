@@ -46,6 +46,7 @@ VMString::VMString(const char* str) : VMObject(VMStringNumberOfFields) {
 	}
 	chars[i] = '\0';
 	
+	strcpy(objectType,"VMString");
 }
 
 
@@ -57,6 +58,7 @@ VMString::VMString( const StdString& s ): VMObject(VMStringNumberOfFields) {
 		chars[i] = s[i];
 	}
 	chars[i] = '\0';
+	strcpy(objectType,"VMPrim");
 } 
 
 int VMString::GetStringLength() const {

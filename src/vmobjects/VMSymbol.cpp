@@ -32,10 +32,12 @@ THE SOFTWARE.
 
 
 VMSymbol::VMSymbol(const char* str) : VMString(str) {
+	strcpy(objectType,"VMSymbol");
 }
 
 
 VMSymbol::VMSymbol( const StdString& s ): VMString(s) {
+	strcpy(objectType,"VMSymbol");
 }
 
 

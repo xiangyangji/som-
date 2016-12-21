@@ -31,10 +31,12 @@ const int VMBigInteger::VMBigIntegerNumberOfFields = 0;
 
 VMBigInteger::VMBigInteger() : VMObject(VMBigIntegerNumberOfFields) {
     this->embeddedInteger = 0;
+    strcpy(objectType,"VMBigInteger");
 }
 
 
 VMBigInteger::VMBigInteger(int64_t val) : VMObject(VMBigIntegerNumberOfFields) {
     this->embeddedInteger = val;
+    strcpy(objectType,"VMBigInteger");
 }
 

@@ -36,10 +36,11 @@ const int VMArray::VMArrayNumberOfFields = 0;
 
 VMArray::VMArray(int size, int nof) : VMObject(nof + VMArrayNumberOfFields) {
     _HEAP->StartUninterruptableAllocation();
-	
+	//
     for (int i = 0; i < size ; ++i) {
         (*this)[i] = nilObject;
     }
+    strcpy(objectType,"VMArray");
     _HEAP->EndUninterruptableAllocation();
 
 }

@@ -37,7 +37,10 @@ class VMFrame;
 
 class VMInvokable : public VMObject {
 public:
-    VMInvokable(int nof = 0) : VMObject(nof + 2){};
+    //VMInvokable(int nof = 0) : VMObject(nof + 2){};
+    VMInvokable(int nof = 0) : VMObject(nof + 2){
+    	strcpy(objectType,"VMInvokable");
+    };
     //virtual operator "()" to invoke the invokable
     virtual void      operator()(pVMFrame) = 0;
 

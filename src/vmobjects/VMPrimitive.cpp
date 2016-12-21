@@ -53,11 +53,12 @@ VMPrimitive::VMPrimitive(pVMSymbol signature) : VMInvokable(VMPrimitiveNumberOfF
     this->SetSignature(signature);
     this->routine = NULL;
     this->empty = false;
-
+    strcpy(objectType,"VMPrim");
     _HEAP->EndUninterruptableAllocation();
 }
 
-
+int       VMPrimitive::GetNumberOfMarkableFields() const
+{return GetNumberOfFields()- VMPrimitiveNumberOfFields;}
 
 void VMPrimitive::MarkReferences() {
     if (gcfield) return;

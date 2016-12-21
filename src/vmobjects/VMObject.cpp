@@ -25,6 +25,7 @@ THE SOFTWARE.
   */
 
 
+#include <typeinfo>
 #include "VMObject.h"
 #include "VMClass.h"
 #include "VMSymbol.h"
@@ -45,10 +46,25 @@ VMObject::VMObject( int numberOfFields ) {
 //    int32_t high = (int32_t) ((uintptr_t)this >>32);
 //    hash = low+high;
 	hash =(uintptr_t) this;
+	this->SetClass(NULL);
+	memset(objectType,0,OTLEN);
+	strcpy(objectType,"VMObject");
+	reserved_align  = 0;
+	addToObjectTable();
     //Object size is set by the heap
 }
 
+void VMObject::addToObjectTable(){
+	//
 
+	   char * name =(char *)malloc(20);
+	   memset(name,0,20);
+	  sprintf(name,"%9s%p",objectType,hash);
+	    ObjectEntry oEntry = {name,(omrobjectptr_t)this,0};
+		ObjectEntry *entryInTable = (ObjectEntry *)hashTableAdd(Heap::GetHeap()->getVM()->objectTable, &oEntry);
+		/* update entry if it already exists in table */
+		entryInTable->objPtr = (omrobjectptr_t)this;
+}
 void VMObject::SetNumberOfFields(uintptr_t nof) {
     this->numberOfFields = nof;
 
@@ -134,13 +150,53 @@ void VMObject::SetField(int index, pVMObject value) {
 //returns the Object's additional memory used (e.g. for Array fields)
 int VMObject::GetAdditionalSpaceConsumption() const
 {
+//	char * nm = NULL;
+//	char * cls = "ClassNull";
+//	if(this != NULL){
+//		if( this->GetClass() != NULL){
+//			if( this->GetClass()->GetName() != NULL){
+//				if( this->GetClass()->GetName()->GetChars()!= NULL){
+//					nm  = this->GetClass()->GetName()->GetChars();
+//				}
+//			}
+//		}else{
+//			nm = cls;
+//		}
+//	}
+//
+//	  uintptr_t size = extensions->objectModel.adjustSizeInBytes(objectSize);
+//	
+//				"class=%s,realsize=%d,objectSize=%d,sizeof(VMObject)=%d,sizeof(pVMObject)=%d,this.numberoffields=%d,return=%d\n"
+//			,nm==NULL? "NULL":nm
+//				,size
+//					,objectSize
+//					,sizeof(VMObject)
+//					,sizeof(pVMObject)
+//					,this->GetNumberOfFields()
+//					,objectSize - (sizeof(VMObject) +
+//	                        sizeof(pVMObject) * (this->GetNumberOfFields() - 1)));
     //The VM*-Object's additional memory used needs to be calculated.
     //It's      the total object size   MINUS   sizeof(VMObject) for basic
     //VMObject  MINUS   the number of fields times sizeof(pVMObject)
-    return (objectSize - (sizeof(VMObject) + 
-                          sizeof(pVMObject) * (this->GetNumberOfFields() - 1)));
+	//zg.this method didn't count the alignment .
+//    return (objectSize - (sizeof(VMObject) +
+//                          sizeof(pVMObject) * (this->GetNumberOfFields() - 1)));
+	int rt = (objectSize - (sizeof(VMObject) +
+            sizeof(pVMObject) * (this->GetNumberOfFields() - 1)));
+    return rt;
 }
 
+ pVMObject       VMObject::GetMarkableFieldObj(int idx) const {
+	 int fn = GetNumberOfFields();
+	 int in = GetNumberOfIndexableFields();
+	 if(idx <fn ){
+		 return (pVMObject) FIELDS[idx];
+	 }else if (idx<fn+in){
+		 return (pVMObject)*(GetStartOfAdditionalPoint()+(idx-fn));
+	 }else {
+		 return NULL;
+	 }
+ }
 
 void VMObject::MarkReferences() {
     if (this->gcfield) return;

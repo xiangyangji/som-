@@ -45,10 +45,24 @@ VMEvaluationPrimitive::VMEvaluationPrimitive(int argc) :
                                &VMEvaluationPrimitive::evaluationRoutine));
     this->SetEmpty(false);
     this->numberOfArguments = _UNIVERSE->NewInteger(argc);
+    strcpy(objectType,"VMEvalPrim");
     _HEAP->EndUninterruptableAllocation();
 }
 
 
+int       VMEvaluationPrimitive::GetNumberOfMarkableFields() const
+{return GetNumberOfFields()- 2+1;}
+
+pVMObject       VMEvaluationPrimitive::GetMarkableFieldObj(int idx) const {
+	 int mfn = GetNumberOfMarkableFields();
+	 if(idx <mfn -1 ){
+		 return (pVMObject) FIELDS[idx];
+	 }else if (idx== mfn-1){		//This extra for this object.
+		 return (pVMObject)numberOfArguments;
+	 }else {
+		 return NULL;
+	 }
+}
 void VMEvaluationPrimitive::MarkReferences() {
     VMPrimitive::MarkReferences();
     this->numberOfArguments->MarkReferences();

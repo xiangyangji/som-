@@ -51,10 +51,32 @@ THE SOFTWARE.
 #include "../compiler/Disassembler.h"
 #include "../compiler/SourcecodeCompiler.h"
 
+
+#include "omrport.h"
+#include "ModronAssertions.h"
+/* OMR Imports */
+#include "AllocateDescription.hpp"
+#include "CollectorLanguageInterfaceImpl.hpp"
+#include "ConfigurationLanguageInterfaceImpl.hpp"
+#include "EnvironmentBase.hpp"
+#include "GCExtensionsBase.hpp"
+#include "GlobalCollector.hpp"
+#include "ObjectAllocationInterface.hpp"
+#include "ObjectModel.hpp"
+#include "omr.h"
+#include "omrgcstartup.hpp"
+#include "omrvm.h"
+#include "StartupManagerImpl.hpp"
+#include "omrExampleVM.hpp"
+
+
+
 // Here we go:
 
 short dumpBytecodes;
 short gcVerbosity;
+
+
 
 
 Universe* Universe::theUniverse = NULL;
@@ -80,6 +102,14 @@ pVMClass systemClass;
 pVMClass blockClass;
 pVMClass doubleClass;
 
+
+/* Start up */
+OMR_VM_Example exampleVM;
+OMR_VMThread *omrVMThread = NULL;
+omrthread_t self = NULL;
+
+
+
 //Singleton accessor
 Universe* Universe::GetUniverse() {
     if (!theUniverse) {
@@ -104,8 +134,56 @@ void Universe::Start(int argc, char** argv) {
 
 
 void Universe::Quit(int err) {
+//	
     if (theUniverse) delete(theUniverse);
+    /* OMR. Shut down */
+    int rc = 0;
+//    
+    	/* Shut down the dispatcher therads */
+    	rc = OMR_GC_ShutdownDispatcherThreads(omrVMThread);
+//    	
+    	Assert_MM_true(OMR_ERROR_NONE == rc);
+//    	
+    	/* Shut down collector */
+    	rc = OMR_GC_ShutdownCollector(omrVMThread);
+//    	
+    	Assert_MM_true(OMR_ERROR_NONE == rc);
+//    	
+    	/* Detach from VM */
+    	rc = OMR_Thread_Free(omrVMThread);
+    	Assert_MM_true(OMR_ERROR_NONE == rc);
 
+    	/* Shut down heap */
+    	rc = OMR_GC_ShutdownHeap(exampleVM._omrVM);
+    	Assert_MM_true(OMR_ERROR_NONE == rc);
+//    	
+    	/* Free object hash table */
+    	hashTableForEachDo(exampleVM.objectTable, objectTableFreeFn, &exampleVM);
+//    	
+    	hashTableFree(exampleVM.objectTable);
+//    	
+    	exampleVM.objectTable = NULL;
+
+
+    	/* Free root hash table */
+    	hashTableFree(exampleVM.rootTable);
+//    	
+    	exampleVM.rootTable = NULL;
+//    	
+    	/* Balance the omrthread_attach_ex() issued above */
+    	omrthread_detach(self);
+
+    	/* Shut down VM
+    	 * This destroys the port library and the omrthread library.
+    	 * Don't use any port library or omrthread functions after this.
+    	 *
+    	 * (This also shuts down trace functionality, so the trace assertion
+    	 * macros might not work after this.)
+    	 */
+//    	
+    	rc = OMR_Shutdown(exampleVM._omrVM);
+    	Assert_MM_true(OMR_ERROR_NONE == rc);
+//    	
     exit(err);
 }
 
@@ -234,19 +312,48 @@ Universe::Universe(){
 
 
 void Universe::initialize(int _argc, char** _argv) {
-    heapSize = 1048576;
+//Try OMR firstly.
+//	 
+	exampleVM._omrVM = NULL;
+	exampleVM.rootTable = NULL;
+	exampleVM.objectTable = NULL;
+
+	/* Initialize the VM */
+	omr_error_t rc = OMR_Initialize(&exampleVM, &exampleVM._omrVM);
+	Assert_MM_true(OMR_ERROR_NONE == rc);
+
+	/* Recursive omrthread_attach() (i.e. re-attaching a thread that is already attached) is cheaper and less fragile
+	 * than non-recursive. If performing a sequence of function calls that are likely to attach & detach internally,
+	 * it is more efficient to call omrthread_attach() before the entire block.
+	 */
+	int j9rc = (int) omrthread_attach_ex(&self, J9THREAD_ATTR_DEFAULT);
+	Assert_MM_true(0 == j9rc);
+//	 
+	/* Initialize root table */
+	exampleVM.rootTable = hashTableNew(
+			exampleVM._omrVM->_runtime->_portLibrary, OMR_GET_CALLSITE(), 0, sizeof(RootEntry), 0, 0, OMRMEM_CATEGORY_MM,
+			rootTableHashFn, rootTableHashEqualFn, NULL, NULL);
+//	 
+	/* Initialize object table */
+	exampleVM.objectTable = hashTableNew(
+			exampleVM._omrVM->_runtime->_portLibrary, OMR_GET_CALLSITE(), 0, sizeof(ObjectEntry), 0, 0, OMRMEM_CATEGORY_MM,
+			objectTableHashFn, objectTableHashEqualFn, NULL, NULL);
+//	 
+
+//OMR finished.
+    heapSize = 2*1024*1024;
 
     vector<StdString> argv = this->handleArguments(_argc, _argv);
-
-    Heap::InitializeHeap(heapSize);
+//    
+    Heap::InitializeHeap(heapSize,&exampleVM);
     heap = _HEAP;
-
+//    
     symboltable = new Symboltable();
     compiler = new SourcecodeCompiler();
     interpreter = new Interpreter();
-    
+//    
     InitializeGlobals();
-
+//    
     pVMObject systemObject = NewInstance(systemClass);
 
     this->SetGlobal(SymbolForChars("nil"), nilObject);
@@ -255,7 +362,7 @@ void Universe::initialize(int _argc, char** _argv) {
     this->SetGlobal(SymbolForChars("system"), systemObject);
     this->SetGlobal(SymbolForChars("System"), systemClass);
     this->SetGlobal(SymbolForChars("Block"), blockClass);
-    
+//    
     pVMMethod bootstrapMethod = NewMethod(SymbolForChars("bootstrap"), 1, 0);
     bootstrapMethod->SetBytecode(0, BC_HALT);
     bootstrapMethod->SetNumberOfLocals(0);
@@ -285,8 +392,9 @@ void Universe::initialize(int _argc, char** _argv) {
     
     // reset "-d" indicator
     if(!(trace>0)) dumpBytecodes = 2 - trace;
-
+//    
     interpreter->Start();
+//    
 }
 
 
@@ -306,11 +414,13 @@ void Universe::InitializeGlobals() {
     //
     //allocate nil object
     //
+	 
     nilObject = new (_HEAP) VMObject;
+//    
     nilObject->SetField(0, nilObject);
-
+//    
     metaClassClass = NewMetaclassClass();
-
+//    
     objectClass     = NewSystemClass();
     nilClass        = NewSystemClass();
     classClass      = NewSystemClass();
@@ -323,10 +433,11 @@ void Universe::InitializeGlobals() {
     primitiveClass  = NewSystemClass();
     stringClass     = NewSystemClass();
     doubleClass     = NewSystemClass();
-    
+//    
     nilObject->SetClass(nilClass);
-
+//    
     InitializeSystemClass(objectClass, NULL, "Object");
+//    
     InitializeSystemClass(classClass, objectClass, "Class");
     InitializeSystemClass(metaClassClass, classClass, "Metaclass");
     InitializeSystemClass(nilClass, objectClass, "Nil");
@@ -341,10 +452,13 @@ void Universe::InitializeGlobals() {
                                      "Primitive");
     InitializeSystemClass(stringClass, objectClass, "String");
     InitializeSystemClass(doubleClass, objectClass, "Double");
-
+//    
     LoadSystemClass(objectClass);
+//    
     LoadSystemClass(classClass);
+//    
     LoadSystemClass(metaClassClass);
+//    
     LoadSystemClass(nilClass);
     LoadSystemClass(arrayClass);
     LoadSystemClass(methodClass);
@@ -355,13 +469,14 @@ void Universe::InitializeGlobals() {
     LoadSystemClass(primitiveClass);
     LoadSystemClass(stringClass);
     LoadSystemClass(doubleClass);
-
+//    
     blockClass = LoadClass(_UNIVERSE->SymbolForChars("Block"));
 
     trueObject = NewInstance(_UNIVERSE->LoadClass(_UNIVERSE->SymbolForChars("True")));
     falseObject = NewInstance(_UNIVERSE->LoadClass(_UNIVERSE->SymbolForChars("False")));
 
     systemClass = LoadClass(_UNIVERSE->SymbolForChars("System"));
+//    
 }
 
 void Universe::Assert( bool value) const {
@@ -400,49 +515,77 @@ pVMClass Universe::GetBlockClassWithArgs( int numberOfArguments) {
 
 
 pVMObject Universe::GetGlobal( pVMSymbol name) {
-    if (HasGlobal(name))
-        return (pVMObject)globals[name];
-
-    return NULL;
+//    if (HasGlobal(name))
+//        return (pVMObject)globals[name];
+//
+//    return NULL;
+	//Try to find them in the rootTable for OMR
+	return HasGlobal(name);
 }
+//
+//RootEntry rEntry = {name->GetChars(),(omrobjectptr_t)val};
+//RootEntry *entryInTable = (RootEntry *)hashTableAdd(exampleVM.rootTable, &rEntry);
+//if (NULL == entryInTable) {
+//	OMRPORT_ACCESS_FROM_OMRVM(exampleVM._omrVM);
+//	omrtty_printf("failed to add new root to root table!\n");
+//}
+///* update entry if it already exists in table */
+//entryInTable->rootPtr = (omrobjectptr_t)val;
 
 
-bool Universe::HasGlobal( pVMSymbol name) {
-    if (globals[name] != NULL) return true;
-    else return false;
+pVMObject  Universe::HasGlobal( pVMSymbol name) {
+//    if (globals[name] != NULL) return true;
+//    else return false;
+	//Try to find them in the root table for OMR.
+	J9HashTableState state;
+	RootEntry *rEntry = NULL;
+	rEntry = (RootEntry *)hashTableStartDo(exampleVM.rootTable, &state);
+	while (rEntry != NULL) {
+		//_markingScheme->markObject(env, rEntry->rootPtr);
+		if(!strcmp(rEntry->name,name->GetChars())){
+			return (pVMObject)rEntry->rootPtr;
+		}
+		rEntry = (RootEntry *)hashTableNextDo(&state);
+	}
+	return NULL;
 }
 
 
 void Universe::InitializeSystemClass( pVMClass systemClass, 
                                      pVMClass superClass, const char* name) {
     StdString s_name(name);
-
+//    
     if (superClass != NULL) {
+//    	
         systemClass->SetSuperClass(superClass);
         pVMClass sysClassClass = systemClass->GetClass();
         pVMClass superClassClass = superClass->GetClass();
         sysClassClass->SetSuperClass(superClassClass);
+//        
     } else {
+//    	
         pVMClass sysClassClass = systemClass->GetClass();
         sysClassClass->SetSuperClass(classClass);
+//        
     }
-
+//    
     pVMClass sysClassClass = systemClass->GetClass();
-
+//    
     systemClass->SetInstanceFields(NewArray(0));
     sysClassClass->SetInstanceFields(NewArray(0));
-
+//    
     systemClass->SetInstanceInvokables(NewArray(0));
+//    
     sysClassClass->SetInstanceInvokables(NewArray(0));
-
+//    
     systemClass->SetName(SymbolFor(s_name));
     ostringstream Str;
     Str << s_name << " class";
     StdString classClassName(Str.str());
     sysClassClass->SetName(SymbolFor(classClassName));
-
+//    
     SetGlobal(systemClass->GetName(), (pVMObject)systemClass);
-
+//    
 
 }
 
@@ -466,22 +609,27 @@ pVMClass Universe::LoadClass( pVMSymbol name) {
 
 
 pVMClass Universe::LoadClassBasic( pVMSymbol name, pVMClass systemClass) {
+//	
     StdString s_name = name->GetStdString();
     //cout << s_name.c_str() << endl;
     pVMClass result;
-
+//    
     for (vector<StdString>::iterator i = classPath.begin();
          i != classPath.end(); ++i) {
+//    	
         result = compiler->CompileClass(*i, name->GetStdString(), systemClass);
+//        
         if (result) {
             if (dumpBytecodes) {
                 Disassembler::Dump(result->GetClass());
                 Disassembler::Dump(result);
             }
+//            
             return result;
         }
 
     }
+//    
     return NULL;
 }
 
@@ -495,17 +643,19 @@ pVMClass Universe::LoadShellClass( StdString& stmt) {
 
 
 void Universe::LoadSystemClass( pVMClass systemClass) {
+//	  
     pVMClass result =
         LoadClassBasic(systemClass->GetName(), systemClass);
     StdString s = systemClass->GetName()->GetStdString();
-
+//    
     if (!result) {
         cout << "Can\'t load system class: " << s;
         Universe::Quit(ERR_FAIL);
     }
-
+//    
     if (result->HasPrimitives() || result->GetClass()->HasPrimitives())
         result->LoadPrimitives(classPath);
+//    
 }
 
 
@@ -532,8 +682,9 @@ pVMArray Universe::NewArrayFromArgv( const vector<StdString>& argv) const {
 
 pVMArray Universe::NewArrayList(ExtendedList<pVMObject>& list ) const {
     int size = list.Size();
+//    
     pVMArray result = NewArray(size);
-
+//   
     if (result)  {
         for (int i = 0; i < size; ++i) {
             pVMObject elem = list.Get(i);
@@ -559,12 +710,12 @@ pVMBlock Universe::NewBlock( pVMMethod method, pVMFrame context, int arguments) 
 
     result->SetMethod(method);
     result->SetContext(context);
-
+    this->SetGlobal(method->GetSignature(),(pVMObject)result);
     return result;
 }
 
 
-pVMClass Universe::NewClass( pVMClass classOfClass) const {
+pVMClass Universe::NewClass( pVMClass classOfClass)  {
     int numFields = classOfClass->GetNumberOfInstanceFields();
     pVMClass result;
     int additionalBytes = numFields * sizeof(pVMObject);
@@ -572,7 +723,7 @@ pVMClass Universe::NewClass( pVMClass classOfClass) const {
     else result = new (_HEAP) VMClass;
 
     result->SetClass(classOfClass);
-
+    this->SetGlobal(SymbolForChars("NewClass"),(pVMObject)result);
     return result;
 }
 
@@ -584,7 +735,7 @@ pVMDouble Universe::NewDouble( double value) const {
 }
 
 
-pVMFrame Universe::NewFrame( pVMFrame previousFrame, pVMMethod method) const {
+pVMFrame Universe::NewFrame( pVMFrame previousFrame, pVMMethod method)  {
     int length = method->GetNumberOfArguments() +
                  method->GetNumberOfLocals()+
                  method->GetMaximumNumberOfStackElements(); 
@@ -600,7 +751,8 @@ pVMFrame Universe::NewFrame( pVMFrame previousFrame, pVMMethod method) const {
 
     result->ResetStackPointer();
     result->SetBytecodeIndex(0);
-
+    //zg.don't we need to set it as global?
+   this->SetGlobal(frameClass->GetName(),(pVMObject)result);
     return result;
 }
 
@@ -634,7 +786,7 @@ pVMClass Universe::NewMetaclassClass() const {
 
 
 pVMMethod Universe::NewMethod( pVMSymbol signature, 
-                    size_t numberOfBytecodes, size_t numberOfConstants) const {
+                    size_t numberOfBytecodes, size_t numberOfConstants)  {
     //Method needs space for the bytecodes and the pointers to the constants
     int additionalBytes = numberOfBytecodes + 
                 numberOfConstants*sizeof(pVMObject);
@@ -643,7 +795,8 @@ pVMMethod Universe::NewMethod( pVMSymbol signature,
     result->SetClass(methodClass);
 
     result->SetSignature(signature);
-
+    //zg.don't we need to set it as global?
+     this->SetGlobal(signature,(pVMObject)result);
     return result;
 }
 
@@ -676,14 +829,14 @@ pVMSymbol Universe::NewSymbol( const char* str ) {
 }
 
 
-pVMClass Universe::NewSystemClass() const {
+pVMClass Universe::NewSystemClass()  {
     pVMClass systemClass = new (_HEAP) VMClass();
 
     systemClass->SetClass(new (_HEAP) VMClass());
     pVMClass mclass = systemClass->GetClass();
     
     mclass->SetClass(metaClassClass);
-
+    this->SetGlobal(SymbolForChars("SystemClass"),(pVMObject)systemClass);
     return systemClass;
 }
 
@@ -704,7 +857,17 @@ pVMSymbol Universe::SymbolForChars( const char* str) {
 
 
 void Universe::SetGlobal(pVMSymbol name, VMObject *val) {
-    globals[name] = val;
+
+    //globals[name] = val;
+	RootEntry rEntry = {name->GetChars(),(omrobjectptr_t)val};
+	RootEntry *entryInTable = (RootEntry *)hashTableAdd(exampleVM.rootTable, &rEntry);
+	if (NULL == entryInTable) {
+		OMRPORT_ACCESS_FROM_OMRVM(exampleVM._omrVM);
+		omrtty_printf("failed to add new root to root table!\n");
+	}
+	/* update entry if it already exists in table */
+	entryInTable->rootPtr = (omrobjectptr_t)val;
+
 }
 
 void Universe::FullGC() {

@@ -35,14 +35,16 @@ THE SOFTWARE.
 #include "../misc/defs.h"
 #include "../memory/Heap.h"
 #include "../vm/Universe.h"
+#include "ObjectModel.hpp"
 
+#include "omrExampleVM.hpp"
 #include "ObjectFormats.h"
-
+#include "GCExtensionsBase.hpp"
 class VMSymbol;
 class VMClass;
 
 #define FIELDS ((pVMObject*)&clazz)
-
+#define OTLEN 16
 /*
  **************************VMOBJECT****************************
  * __________________________________________________________ *
@@ -57,8 +59,12 @@ class VMClass;
  *                                                            *
  **************************************************************
  */
-
-class VMObject {
+class OMRObjectHeader{
+public:
+	int32_t reserved;	//Reserved for OMR used.
+	int32_t reserved_align; //Align to the 0x8, These 4 bytes are no use now.
+};
+class VMObject:public OMRObjectHeader {
 
 public:
     /* Constructor */
@@ -69,6 +75,14 @@ public:
 	virtual void        SetClass(pVMClass cl);
 	virtual pVMSymbol   GetFieldName(int index) const; 
 	virtual int         GetFieldIndex(pVMSymbol fieldName) const;
+	//zg.add start
+	virtual int       GetNumberOfIndexableFields() const {return 0;};
+	virtual int       GetNumberOfMarkableFields() const {return GetNumberOfFields()+GetNumberOfIndexableFields();};
+	virtual pVMObject       GetMarkableFieldObj(int idx) const ;
+	//This impl may not workable for some class (such as VMInteger, but it only make sense for the class which has at lease one indexableFields. We can only focus on the VMARray and VMMethods
+	virtual pVMObject * GetStartOfAdditionalPoint() const{ return &(FIELDS[this->GetNumberOfFields()]);};
+   virtual void addToObjectTable();
+	//zg.add end.
 	virtual uintptr_t         GetNumberOfFields() const;
 	virtual void        SetNumberOfFields(uintptr_t nof);
 	virtual int         GetDefaultNumberOfFields() const;
@@ -81,6 +95,7 @@ public:
     virtual void        IncreaseGCCount() {};
     virtual void        DecreaseGCCount() {};
 
+     char * getObjectType() const {return (char *)objectType;}
     uintptr_t     GetHash() const { return hash; };
     uintptr_t     GetObjectSize() const;
 	int32_t     GetGCField() const;
@@ -121,6 +136,7 @@ protected:
 	uintptr_t     objectSize; //set by the heap at allocation time
     uintptr_t     numberOfFields;
     int32_t     gcfield;
+    char objectType[OTLEN];
 
     //pVMObject* FIELDS;
     //Start of fields. All members beyond this point are indexable 

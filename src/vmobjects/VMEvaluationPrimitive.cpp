@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include "VMFrame.h"
 #include "VMBlock.h"
 #include "VMInteger.h"
+#include "VMMethod.h"
 
 #include "../vm/Universe.h"
 
@@ -49,23 +50,40 @@ VMEvaluationPrimitive::VMEvaluationPrimitive(int argc) :
     _HEAP->EndUninterruptableAllocation();
 }
 
-
-int       VMEvaluationPrimitive::GetNumberOfMarkableFields() const
-{return GetNumberOfFields()- 2+1;}
-
-pVMObject       VMEvaluationPrimitive::GetMarkableFieldObj(int idx) const {
-	 int mfn = GetNumberOfMarkableFields();
-	 if(idx <mfn -1 ){
-		 return (pVMObject) FIELDS[idx];
-	 }else if (idx== mfn-1){		//This extra for this object.
-		 return (pVMObject)numberOfArguments;
-	 }else {
-		 return NULL;
-	 }
-}
+//
+//int       VMEvaluationPrimitive::GetNumberOfMarkableFields() const
+//{return GetNumberOfFields()- 2+1;}
+//
+//pVMObject       VMEvaluationPrimitive::GetMarkableFieldObj(int idx) const {
+//	 int mfn = GetNumberOfMarkableFields();
+//	 if(idx <mfn -1 ){
+//		 return (pVMObject) FIELDS[idx];
+//	 }else if (idx== mfn-1){		//This extra for this object.
+//		 return (pVMObject)numberOfArguments;
+//	 }else {
+//		 return NULL;
+//	 }
+//}
 void VMEvaluationPrimitive::MarkReferences() {
     VMPrimitive::MarkReferences();
     this->numberOfArguments->MarkReferences();
+}
+
+
+pVMObject       VMEvaluationPrimitive::GetNextMarkableField()  {
+
+	 int fn = GetNumberOfFields();
+	 pVMObject po = NULL;
+	 //printf("zg.VMEvaluationPrimitive::GetNextMarkableField.cp0,fn=%d,markablefieldindex=%d\n",fn,markablefieldindex);
+	 if(markablefieldindex <fn ){
+		 po =  (pVMObject) FIELDS[markablefieldindex];
+	 }else if (markablefieldindex<fn+1){
+		po = numberOfArguments;
+	 }else {
+		po = NULL;
+	 }
+	 markablefieldindex++;
+	 return po;
 }
 
 
@@ -96,18 +114,22 @@ pVMSymbol VMEvaluationPrimitive::computeSignatureString(int argc){
 }
 
 void VMEvaluationPrimitive::evaluationRoutine(pVMObject object, pVMFrame frame){
+	//printf("zg. VMEvaluationPrimitive::evaluationRoutine.cp0,frame=%s\n",frame->GetMethod()->GetSignature()->GetChars());
     pVMEvaluationPrimitive self = (pVMEvaluationPrimitive) object;
-
+   // printf("zg. VMEvaluationPrimitive::evaluationRoutine.cp01,frame=%s\n",frame->GetMethod()->GetSignature()->GetChars());
      // Get the block (the receiver) from the stack
     int numArgs = self->numberOfArguments->GetEmbeddedInteger();
+    //printf("zg. VMEvaluationPrimitive::evaluationRoutine.cp02,self=%p,frame=%s,numArgs=%d\n",self,frame->GetMethod()->GetSignature()->GetChars(),numArgs);
     pVMBlock block = (pVMBlock) frame->GetStackElement(numArgs - 1);
-    
+   // printf("zg. VMEvaluationPrimitive::evaluationRoutine.cp1,frame=%s\n",frame->GetMethod()->GetSignature()->GetChars());
     // Get the context of the block...
     pVMFrame context = block->GetContext();
     
     // Push a new frame and set its context to be the one specified in the block
     pVMFrame NewFrame = _UNIVERSE->GetInterpreter()->PushNewFrame(
                                                         block->GetMethod());
+    //printf("zg. VMEvaluationPrimitive::evaluationRoutine.cp2,frame=%s\n",frame->GetMethod()->GetSignature()->GetChars());
     NewFrame->CopyArgumentsFrom(frame);
     NewFrame->SetContext(context);
+    //printf("zg. VMEvaluationPrimitive::evaluationRoutine.cp9,frame=%s\n",frame->GetMethod()->GetSignature()->GetChars());
 }

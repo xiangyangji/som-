@@ -46,7 +46,10 @@
 #include "Scavenger.hpp"
 #include "SlotObject.hpp"
 #include "SublistFragment.hpp"
-
+#include "VMClass.h"
+#include "VMSymbol.h"
+#include "VMFrame.h"
+#include "VMMethod.h"
 // TODD @A1A Begin
 //#define TODD_DEBUG
 static omrobjectptr_t UninterruptableAllocationObjectArray[1024*64];
@@ -163,10 +166,18 @@ MM_CollectorLanguageInterfaceImpl::markingScheme_scanRoots(MM_EnvironmentBase *e
 	J9HashTableState state;
 	RootEntry *rEntry = NULL;
 	rEntry = (RootEntry *)hashTableStartDo(omrVM->rootTable, &state);
+	uint32_t rootsnumber = 0;
 	while (rEntry != NULL) {
 		_markingScheme->markObject(env, rEntry->rootPtr);
+//		if(strcmp((char *)( rEntry->rootPtr+6),"VMClass") == 0){
+//			printf("zg.markingScheme_scanRoots,cp0.obj=%p,objtype=%s,className=%s\n",rEntry->rootPtr,(char *)( rEntry->rootPtr+6),((VMClass *) rEntry->rootPtr)->GetName()->GetChars());
+//		}else{
+//			printf("zg.markingScheme_scanRoots,cp1.obj=%p,objtype=%s,clazz(%s)=%p\n",rEntry->rootPtr,(char *)( rEntry->rootPtr+6),((VMObject *)rEntry->rootPtr)->GetClass()->GetName()->GetChars(),((VMObject *)rEntry->rootPtr)->GetClass());
+//		}
 		rEntry = (RootEntry *)hashTableNextDo(&state);
+		rootsnumber ++;
 	}
+	//printf("zg.markingScheme_scanRoots.cp2,totalroots=%d\n",rootsnumber);
 	OMR_VMThread *walkThread;
 	GC_OMRVMThreadListIterator threadListIterator(env->getOmrVM());
 	while((walkThread = threadListIterator.nextOMRVMThread()) != NULL) {
@@ -177,14 +188,27 @@ MM_CollectorLanguageInterfaceImpl::markingScheme_scanRoots(MM_EnvironmentBase *e
 			_markingScheme->markObject(env, (omrobjectptr_t)walkThread->_savedObject2);
 		}
 	}
-#ifdef TODD_DEBUG 
-    printf("ScanRoot for Uninterrupt Object, count=%d, max=%d\n"
-            , UninterruptableAllocationObjectCount
-            , MaxUninterruptableAllocationObjectCount);
-#endif
-    for(int i = 0; i < UninterruptableAllocationObjectCount; ++i)
-    {   _markingScheme->markObject(env, UninterruptableAllocationObjectArray[i]);        
+//#ifdef TODD_DEBUG
+//    printf("ScanRoot for Uninterrupt Object, count=%d, max=%d\n"
+//            , UninterruptableAllocationObjectCount
+//            , MaxUninterruptableAllocationObjectCount);
+//#endif
+//    for(int i = 0; i < UninterruptableAllocationObjectCount; ++i)
+//    {   _markingScheme->markObject(env, UninterruptableAllocationObjectArray[i]);
+//    }
+    // Get the current frame and mark it.
+	// Since marking is done recursively, this automatically
+	// marks the whole stack
+    pVMFrame currentFrame = _UNIVERSE->GetInterpreter()->GetFrame();
+    //currentFrame->PrintAllFrames();
+    if (currentFrame != NULL) {
+    		_markingScheme->markObject(env,(omrobjectptr_t)currentFrame);
+        //((pVMObject)currentFrame)->MarkReferences();
+    		//printf("zg.markingScheme_scanRoots.cp3.frame=%p,method(%s)=%p\n",currentFrame,currentFrame->GetMethod()->GetSignature()->GetChars(),currentFrame->GetMethod());
     }
+    globalGcCount++;
+    //printf("zg.globalGcCount=%d\n",globalGcCount);
+
 }
 
 void
@@ -222,11 +246,19 @@ MM_CollectorLanguageInterfaceImpl::markingScheme_scanObject(MM_EnvironmentBase *
 {
 	GC_ObjectIterator objectIterator(_omrVM, objectPtr);
 	GC_SlotObject *slotObject = NULL;
+
+	//printf("zg.markingScheme_scanObject,cp0.obj=%p,objtype=%s,clazz(%s)=%p\n",objectPtr,(char *)( objectPtr+6),((VMObject *)objectPtr)->GetClass()->GetName()->GetChars(),((VMObject *)objectPtr)->GetClass());
+
 	while (NULL != (slotObject = objectIterator.nextSlot())) {
-		omrobjectptr_t slot = slotObject->readReferenceFromSlot();
+		//omrobjectptr_t slot = slotObject->readReferenceFromSlot();
+		omrobjectptr_t slot = slotObject->readAddressFromSlot();
 		if (_markingScheme->isHeapObject(slot)) {
+//			printf("zg.markingScheme_scanObject,cp1.obj=%p,objtype=%s,clazz(%s)=%p\n",slot,(char *)( slot+6),((VMObject *)slot)->GetClass()->GetName()->GetChars(),((VMObject *)slot)->GetClass());
 			_markingScheme->markObject(env, slot);
+		}else{
+//			printf("zg.markingScheme_scanObject,cp2.obj=%p is NOT in heap!\n",slot);
 		}
+
 	}
 	return env->getExtensions()->objectModel.getSizeInBytesWithHeader(objectPtr);
 }

@@ -39,6 +39,7 @@ public:
     
     inline void    SetEmbeddedDouble(double);
     inline double  GetEmbeddedDouble() const;
+    virtual pVMObject       GetNextMarkableField() const ;
 private:
     double embeddedDouble;
 

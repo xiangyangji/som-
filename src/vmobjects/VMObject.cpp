@@ -50,6 +50,7 @@ VMObject::VMObject( int numberOfFields ) {
 	memset(objectType,0,OTLEN);
 	strcpy(objectType,"VMObject");
 	reserved_align  = 0;
+	markablefieldindex = 0;
 	addToObjectTable();
     //Object size is set by the heap
 }
@@ -186,17 +187,37 @@ int VMObject::GetAdditionalSpaceConsumption() const
     return rt;
 }
 
- pVMObject       VMObject::GetMarkableFieldObj(int idx) const {
+// pVMObject       VMObject::GetMarkableFieldObj(int idx) const {
+//	 int fn = GetNumberOfFields();
+//	 int in = GetNumberOfIndexableFields();
+//	 if(idx <fn ){
+//		 return (pVMObject) FIELDS[idx];
+//	 }else if (idx<fn+in){
+//		 return (pVMObject)*(GetStartOfAdditionalPoint()+(idx-fn));
+//	 }else {
+//		 return NULL;
+//	 }
+// }
+
+pVMObject       VMObject::GetNextMarkableField()  {
+	//This method is too general, looks like every system objects need their own ways of this function. This function should fit for VMArray, VMFrame, VMClass, VMBlock
+	//Also fit for VMMethod, which have different define of GetNumberOfIndexableFields()..
 	 int fn = GetNumberOfFields();
 	 int in = GetNumberOfIndexableFields();
-	 if(idx <fn ){
-		 return (pVMObject) FIELDS[idx];
-	 }else if (idx<fn+in){
-		 return (pVMObject)*(GetStartOfAdditionalPoint()+(idx-fn));
+	 pVMObject po = NULL;
+
+	 if(markablefieldindex <fn ){
+		 po =  (pVMObject) FIELDS[markablefieldindex];
+	 }else if (markablefieldindex<fn+in){
+		po = (pVMObject)*(GetStartOfAdditionalPoint()+(markablefieldindex-fn));
 	 }else {
-		 return NULL;
+		po = NULL;
 	 }
- }
+	 //printf("zg.VMObject::GetNextMarkableField,cp0,this=%p,markablefieldindex=%d,po=%p\n",this,markablefieldindex,po);
+	 markablefieldindex++;
+	 return po;
+}
+
 
 void VMObject::MarkReferences() {
     if (this->gcfield) return;

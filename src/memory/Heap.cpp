@@ -53,6 +53,7 @@ THE SOFTWARE.
 #include "ObjectModel.hpp"
 #include "omr.h"
 #include "omrgcstartup.hpp"
+#include "omrgc.h"
 #include "omrvm.h"
 #include "StartupManagerImpl.hpp"
 #include "omrExampleVM.hpp"
@@ -97,27 +98,9 @@ Heap::Heap(uintptr_t objectSpaceSize,OMR_VM_Example *vm) {
 	/* Initialize heap and collector */
 	{//TODO: Why can not new it ? with a static operator new overriding.? Using the default 1M-2M
 		/* This has to be done in local scope because MM_StartupManager has a destructor that references the OMR VM */
-//		MM_StartupManagerImpl * strMgr = NULL;
-//		if(objectSpaceSize >= 2*1024*1024){
-//			strMgr = new  MM_StartupManagerImpl(_vm->_omrVM,objectSpaceSize);
-//		}else{
-//			strMgr = new  MM_StartupManagerImpl(_vm->_omrVM);
-//		}
-		MM_StartupManagerImpl  strMgr (_vm->_omrVM);
-		rc = OMR_GC_IntializeHeapAndCollector(_vm->_omrVM, &strMgr);
 	}
-	Assert_MM_true(OMR_ERROR_NONE == rc);
-
-	/* Attach current thread to the VM */
-	rc = OMR_Thread_Init(_vm->_omrVM, NULL, &omrVMThread, "GCTestMailThread");
-	Assert_MM_true(OMR_ERROR_NONE == rc);
-
-	/* Kick off the dispatcher therads */
-	rc = OMR_GC_InitializeDispatcherThreads(omrVMThread);
-	Assert_MM_true(OMR_ERROR_NONE == rc);
-
 	OMRPORT_ACCESS_FROM_OMRVM(_vm->_omrVM);
-	omrtty_printf("VM/GC INITIALIZED\n");
+	omrtty_printf("OMR VM/GC INITIALIZED\n");
 	uninterruptableCounter = 0;
 	_vmthread = omrVMThread;
 	/* Do stuff */
@@ -126,10 +109,10 @@ Heap::Heap(uintptr_t objectSpaceSize,OMR_VM_Example *vm) {
 	allocationInterface = env->_objectAllocationInterface;
 	extensions = env->getExtensions();
 	omrHeap = extensions ->getHeap();
-	omrtty_printf("configuration is %s\n", extensions->configuration->getBaseVirtualTypeId());
-	omrtty_printf("collector interface is %s\n", env->getExtensions()->collectorLanguageInterface->getBaseVirtualTypeId());
-	omrtty_printf("garbage collector is %s\n", env->getExtensions()->getGlobalCollector()->getBaseVirtualTypeId());
-	omrtty_printf("allocation interface is %s\n", allocationInterface->getBaseVirtualTypeId());
+//	omrtty_printf("configuration is %s\n", extensions->configuration->getBaseVirtualTypeId());
+//	omrtty_printf("collector interface is %s\n", env->getExtensions()->collectorLanguageInterface->getBaseVirtualTypeId());
+//	omrtty_printf("garbage collector is %s\n", env->getExtensions()->getGlobalCollector()->getBaseVirtualTypeId());
+//	omrtty_printf("allocation interface is %s\n", allocationInterface->getBaseVirtualTypeId());
 	 numAlloc = 0;
 }
 
@@ -180,12 +163,19 @@ void* Heap::Allocate(size_t size) {
 	uintptr_t allocatedFlags = 0;
 	MM_AllocateDescription mm_allocdescription(size, allocatedFlags, true, true);
 	//omrobjectptr_t obj = (omrobjectptr_t)allocationInterface->allocateObject(env, &mm_allocdescription, env->getMemorySpace(), false);
-	omrobjectptr_t obj = (omrobjectptr_t)allocationInterface->allocateObject(env, &mm_allocdescription, env->getMemorySpace(), true);
-
+	//omrobjectptr_t obj = (omrobjectptr_t)allocationInterface->allocateObject(env, &mm_allocdescription, env->getMemorySpace(), true);
+	//omrobjectptr_t obj = (omrobjectptr_t)OMR_GC_AllocateNoGC(omrVMThread, OMR_EXAMPLE_ALLOCATION_CATEGORY, size, allocatedFlags);
+	omrobjectptr_t obj = (omrobjectptr_t)OMR_GC_Allocate(omrVMThread, OMR_EXAMPLE_ALLOCATION_CATEGORY, size, allocatedFlags);
 	if (NULL != obj) {
+//		printf("zg.Heap::Allocate.cp0,obj=%p\n",obj);
+//		MM_ObjectAllocationInterface *allocationInterface = env->_objectAllocationInterface;
+//			MM_AllocationStats *allocationStats = allocationInterface->getAllocationStats();
+//			printf("thread allocated %d tlh bytes, %d non-tlh bytes, from %d allocations before NULL\n",
+//				allocationStats->tlhBytesAllocated(), allocationStats->nontlhBytesAllocated());
 		extensions->objectModel.setObjectSize(obj, mm_allocdescription.getBytesRequested());
         addUninterruptableAllocationObject(obj);      // TODD @A1A Begin
 		//((VMObject *) obj )->SetObjectSize(size);   //zg. no need to set.  as it's already in the first word( 4 bytes) .  The first byte is reserved for age&flag, and the remains 3 bytes are for size.
+        globalObjectsAllocated++;
 	}else{
 		std::cout <<"ERROR: allocation failure."<<std::endl;
 	}

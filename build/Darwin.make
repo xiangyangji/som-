@@ -67,7 +67,7 @@ CSOM_NAME	=somr
 CORE_NAME	=SOMCore
 PRIMITIVESCORE_NAME  =PrimitiveCore
 #SHARED_EXTENSION    =dll
-SHARED_EXTENSION    =dynlib
+SHARED_EXTENSION    =dylib
 
 ############ global stuff -- overridden by ../Makefile
 

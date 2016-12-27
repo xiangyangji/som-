@@ -64,7 +64,8 @@ void  _System::Global_(pVMObject /*object*/, pVMFrame frame) {
 void  _System::Global_put_(pVMObject /*object*/, pVMFrame frame) {
     pVMObject value = frame->Pop();
     pVMSymbol arg = (pVMSymbol)frame->Pop();
-    _UNIVERSE->SetGlobal(arg, value);    
+ //zg.why do we need this  SetGlobal()?
+    _UNIVERSE->SetGlobal(arg, value);
 }
 
 

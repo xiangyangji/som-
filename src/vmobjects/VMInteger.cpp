@@ -26,8 +26,9 @@ THE SOFTWARE.
 
 
 #include "VMInteger.h"
-
-const int VMInteger::VMIntegerNumberOfFields = 0; 
+#include "VMObject.h"
+const int VMInteger::VMIntegerNumberOfFields = 0;
+//const int VMInteger::VMIntegerNumberOfFields = 1;
 
 VMInteger::VMInteger() : VMObject(VMIntegerNumberOfFields) {
     embeddedInteger = 0;
@@ -43,3 +44,7 @@ VMInteger::VMInteger(int32_t val) : VMObject(VMIntegerNumberOfFields) {
 
 
 
+
+pVMObject       VMInteger::GetNextMarkableField() const {
+	 return NULL;
+}

@@ -42,3 +42,8 @@ VMDouble::VMDouble(double val) : VMObject(VMDoubleNumberOfFields) {
 
 
 
+
+
+pVMObject       VMDouble::GetNextMarkableField() const {
+	 return NULL;
+}

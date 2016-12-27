@@ -44,7 +44,7 @@ public:
     
     virtual inline bool    IsEmpty() const;
     virtual inline void    SetRoutine(PrimitiveRoutine* rtn);
-    virtual int       GetNumberOfMarkableFields() const;
+   // virtual int       GetNumberOfMarkableFields() const;
     virtual void    MarkReferences();
     virtual void    SetEmpty(bool value) { empty = value; };
 
@@ -53,7 +53,7 @@ public:
     virtual void    operator()(pVMFrame frm) { (*routine)(this, frm); };
 
     virtual bool      IsPrimitive() const { return true; };
-    
+    virtual pVMObject       GetNextMarkableField()  ;
 private:
     void EmptyRoutine(pVMObject self, pVMFrame frame);
 

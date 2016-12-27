@@ -40,7 +40,7 @@ class VMFrame : public VMArray {
 public:
     static pVMFrame EmergencyFrameFrom(pVMFrame from, int extraLength);
 
-    VMFrame(int size, int nof = 0);
+    VMFrame(int size,pVMMethod m,pVMFrame pvf=NULL,bool iscopy=false, int nof = 0);
     
     virtual inline pVMFrame   GetPreviousFrame() const;
     virtual inline void       SetPreviousFrame(pVMObject);
@@ -71,8 +71,15 @@ public:
     
     virtual void       MarkReferences();
     virtual void       PrintStack() const;
+
+    virtual void       PrintAllFrameStack() const;
+    virtual void       PrintAllFrames() const;
+
     virtual inline     pVMInteger GetStackPointer() const;
     virtual int        RemainingStackSize() const;
+    //zg.This fit for vmobject, so, no need to define here.
+    //virtual pVMObject       GetNextMarkableField() const;
+
 private:
     pVMFrame   previousFrame;
     pVMFrame   context;

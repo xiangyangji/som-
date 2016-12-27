@@ -130,6 +130,8 @@ void VMMethod::SetHolderAll(pVMClass hld) {
 
 pVMObject VMMethod::GetConstant(int indx) const {
     uint8_t bc = _BC[indx+1];
+    //((uint8_t*)&((VMObject**)&clazz)[this->GetNumberOfFields() + this->GetNumberOfIndexableFields()])
+// #define _BC ((uint8_t*)&FIELDS[this->GetNumberOfFields() + this->GetNumberOfIndexableFields()])
     if (bc >= this->GetNumberOfIndexableFields()) {
         cout << "Error: Constant index out of range" << endl;
         return NULL;
@@ -169,6 +171,7 @@ pVMObject VMMethod::GetIndexableField(int idx) const {
         _UNIVERSE->ErrorExit("Array index out of bounds exception");
     }
     return theEntries(idx);
+    //((VMObject**)&clazz)[this->GetNumberOfFields()+idx]
 }
 
 
@@ -196,4 +199,3 @@ int VMMethod::GetNumberOfIndexableFields() const {
     //as bytecodes need space, too, and there might be padding
     return this->numberOfConstants->GetEmbeddedInteger();
 }
-

@@ -26,6 +26,7 @@ THE SOFTWARE.
 
 
 #include "VMBigInteger.h"
+#include "VMObject.h"
 
 const int VMBigInteger::VMBigIntegerNumberOfFields = 0; 
 
@@ -40,3 +41,7 @@ VMBigInteger::VMBigInteger(int64_t val) : VMObject(VMBigIntegerNumberOfFields) {
     strcpy(objectType,"VMBigInteger");
 }
 
+
+pVMObject       VMBigInteger::GetNextMarkableField() const {
+	 return NULL;
+}

@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 #include "VMString.h"
 #include "VMInteger.h"
+#include "VMObject.h"
 
 //this macro could replace the chars member variable
 //#define CHARS ((char*)&clazz+sizeof(pVMObject))
@@ -73,6 +74,9 @@ StdString VMString::GetStdString() const {
 	return StdString(chars);
 }
 
-
+pVMObject       VMString::GetNextMarkableField() const {
+	//For VMString objects, there's no extra fields to mark.
+	 return NULL;
+}
 
 

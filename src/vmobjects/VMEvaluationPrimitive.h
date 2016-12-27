@@ -38,9 +38,10 @@ class VMFrame;
 class VMEvaluationPrimitive : public VMPrimitive {
 public:
     VMEvaluationPrimitive(int argc);
-    virtual pVMObject       GetMarkableFieldObj(int ) const;
-   virtual  int       GetNumberOfMarkableFields() const;
+    //virtual pVMObject       GetMarkableFieldObj(int ) const;
+   //virtual  int       GetNumberOfMarkableFields() const;
     virtual void MarkReferences();
+    virtual pVMObject       GetNextMarkableField()  ;
 private:
     static pVMSymbol computeSignatureString(int argc);
     void evaluationRoutine(pVMObject object, pVMFrame frame);

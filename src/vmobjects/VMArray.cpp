@@ -59,6 +59,7 @@ pVMObject& VMArray::operator[](int idx) const {
     if (idx > GetNumberOfIndexableFields()-1 || idx < 0) {
         cout << "Array index out of bounds: Accessing " << idx 
              << ", but array size is only " << GetNumberOfIndexableFields()-1 
+			 << "this="<<this
              << endl;
         _UNIVERSE->ErrorExit("Array index out of bounds");
     }
@@ -81,8 +82,7 @@ void VMArray::MarkReferences() {
     if (gcfield) return;
     VMObject::MarkReferences();
 	for (int i = 0 ; i < GetNumberOfIndexableFields() ; ++i) {
-		if (theEntries(i) != NULL)
+		if (theEntries(i) != NULL && theEntries(i) != nilObject)
 			theEntries(i)->MarkReferences();
 	}
-    
 }

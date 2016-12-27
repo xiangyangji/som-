@@ -105,7 +105,7 @@ bool VMClass::AddInstanceInvokable(pVMObject ptr) {
 
 void VMClass::AddInstancePrimitive(pVMPrimitive ptr) {
 	if (AddInstanceInvokable((pVMObject)ptr)) {
-		//cout << "Warn: Primitive "<<ptr->GetSignature<<" is not in class definition for class " << name->GetStdString() << endl;
+		cout << "Warn: Primitive "<<ptr->GetSignature()<<" is not in class definition for class " << name->GetStdString() << endl;
 	}
 }
 

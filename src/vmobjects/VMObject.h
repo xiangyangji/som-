@@ -77,8 +77,11 @@ public:
 	virtual int         GetFieldIndex(pVMSymbol fieldName) const;
 	//zg.add start
 	virtual int       GetNumberOfIndexableFields() const {return 0;};
-	virtual int       GetNumberOfMarkableFields() const {return GetNumberOfFields()+GetNumberOfIndexableFields();};
-	virtual pVMObject       GetMarkableFieldObj(int idx) const ;
+	//virtual int       GetNumberOfMarkableFields() const {return GetNumberOfFields()+GetNumberOfIndexableFields();};
+	//virtual pVMObject       GetMarkableFieldObj(int idx) const ;
+	virtual pVMObject GetNextMarkableField() ;
+
+	void SetMarkableFieldIndex(int32_t value){markablefieldindex = value;}
 	//This impl may not workable for some class (such as VMInteger, but it only make sense for the class which has at lease one indexableFields. We can only focus on the VMARray and VMMethods
 	virtual pVMObject * GetStartOfAdditionalPoint() const{ return &(FIELDS[this->GetNumberOfFields()]);};
    virtual void addToObjectTable();
@@ -101,7 +104,7 @@ public:
 	int32_t     GetGCField() const;
 	void        SetGCField(int32_t value);
     void        SetObjectSize(size_t size);
-	
+
     /* Operators */
 
     /**
@@ -136,6 +139,7 @@ protected:
 	uintptr_t     objectSize; //set by the heap at allocation time
     uintptr_t     numberOfFields;
     int32_t     gcfield;
+    int32_t markablefieldindex;
     char objectType[OTLEN];
 
     //pVMObject* FIELDS;

@@ -40,19 +40,19 @@ THE SOFTWARE.
 pVMFrame VMFrame::EmergencyFrameFrom( pVMFrame from, int extraLength ) {
     int length = from->GetNumberOfIndexableFields() + extraLength;
     int additionalBytes = length * sizeof(pVMObject);
-    pVMFrame result = new (_HEAP, additionalBytes) VMFrame(length);
+    pVMFrame result = new (_HEAP, additionalBytes) VMFrame(length,from->GetMethod(),from->GetPreviousFrame(),true);
     
-    result->SetClass(from->GetClass());
-    //copy arguments, locals and the stack
-    from->CopyIndexableFieldsTo(result);
-
-    //set Frame members
-    result->SetPreviousFrame(from->GetPreviousFrame());
-    result->SetMethod(from->GetMethod());
-    result->SetContext(from->GetContext());
-    result->stackPointer = from->GetStackPointer();
-    result->bytecodeIndex = from->bytecodeIndex;
-    result->localOffset = from->localOffset;
+//    result->SetClass(from->GetClass()); 	///Should be frameClass, shouldn't it?
+//    //copy arguments, locals and the stack
+//    from->CopyIndexableFieldsTo(result);
+//
+//    //set Frame members
+//    result->SetPreviousFrame(from->GetPreviousFrame());
+//    result->SetMethod(from->GetMethod());
+//    result->SetContext(from->GetContext());
+//    result->stackPointer = from->GetStackPointer();
+//    result->bytecodeIndex = from->bytecodeIndex;
+//    result->localOffset = from->localOffset;
 
     return result;
 }
@@ -60,14 +60,41 @@ pVMFrame VMFrame::EmergencyFrameFrom( pVMFrame from, int extraLength ) {
 
 const int VMFrame::VMFrameNumberOfFields = 6; 
 
-VMFrame::VMFrame(int size, int nof) : VMArray(size, 
-                                              nof + VMFrameNumberOfFields) {
-    _HEAP->StartUninterruptableAllocation();
-    this->localOffset = _UNIVERSE->NewInteger(0);
-    this->bytecodeIndex = _UNIVERSE->NewInteger(0);
-    this->stackPointer = _UNIVERSE->NewInteger(0);
-    strcpy(objectType,"VMFrame");
-    _HEAP->EndUninterruptableAllocation();
+VMFrame::VMFrame(int size,pVMMethod m,pVMFrame pvf,bool iscopy, int nof) : VMArray(size, nof + VMFrameNumberOfFields) {
+
+
+	strcpy(objectType,"VMFrame");
+	Interpreter * ip = _UNIVERSE->GetInterpreter();
+
+	if(iscopy){
+	    this->SetClass(pvf->GetClass()); 	///Should be frameClass, shouldn't it?
+	    //copy arguments, locals and the stack
+	    pvf->CopyIndexableFieldsTo(this);
+
+	    //set Frame members
+	    this->SetPreviousFrame(pvf->GetPreviousFrame());
+	    this->SetMethod(pvf->GetMethod());
+	    this->SetContext(pvf->GetContext());
+	    this->stackPointer = pvf->GetStackPointer();
+	    this->bytecodeIndex = pvf->bytecodeIndex;
+	    this->localOffset = pvf->localOffset;
+
+		ip->SetFrame(this);
+	}else{
+		SetMethod(m);
+		SetClass(frameClass);
+		if(pvf == NULL) { pvf = (pVMFrame) nilObject;}
+		SetPreviousFrame(pvf);
+		ip->SetFrame(this);
+		//Move as much as possible before extra space requested.
+		_HEAP->StartUninterruptableAllocation();
+		localOffset = _UNIVERSE->NewInteger(0);
+		bytecodeIndex = _UNIVERSE->NewInteger(0);
+		stackPointer = _UNIVERSE->NewInteger(0);
+		_HEAP->EndUninterruptableAllocation();
+	    ResetStackPointer();
+	    //SetBytecodeIndex(0);
+	}
 }
 
 pVMMethod VMFrame::GetMethod() const {
@@ -80,14 +107,14 @@ void      VMFrame::SetMethod(pVMMethod method) {
 }
 
 bool     VMFrame::HasPreviousFrame() const {
-    return this->previousFrame != nilObject;
+    return previousFrame != nilObject && previousFrame != NULL;
 }
 
 
 
 
 bool     VMFrame::HasContext() const {
-    return this->context !=  nilObject; 
+    return context !=  nilObject && context !=  NULL;
 }
 
 
@@ -120,20 +147,26 @@ int VMFrame::RemainingStackSize() const {
 
 pVMObject VMFrame::Pop() {
     int32_t sp = this->stackPointer->GetEmbeddedInteger();
+    if(sp<0) printf("SOMR.ERROR, sp=%d, which is too small\n",sp);
     this->stackPointer->SetEmbeddedInteger(sp-1);
-    return (*this)[sp];
+    pVMObject po = (*this)[sp];
+    (*this)[sp] = nilObject;
+    return po;
 }
 
 
 void      VMFrame::Push(pVMObject obj) {
     int32_t sp = this->stackPointer->GetEmbeddedInteger() + 1;
+    if(sp >= this->GetNumberOfIndexableFields()) printf("SOMR.ERROR, sp=%d, which is bigger than indexable fields index(%d)\n",sp,this->GetNumberOfIndexableFields()-1);
     this->stackPointer->SetEmbeddedInteger(sp);
     (*this)[sp] = obj; 
 }
 
 
 void VMFrame::PrintStack() const {
-    cout << "SP: " << this->stackPointer->GetEmbeddedInteger() << endl;
+
+	//cout<<"Holder:"<< GetMethod()->GetHolder()->GetClass()->GetName()->GetChars() <<"/Method:" <<GetMethod()->GetSignature()->GetChars()<< endl;
+    cout <<"SP: " << this->stackPointer->GetEmbeddedInteger() << endl;
    // for (int i = 0; i < this->GetNumberOfIndexableFields()+1; ++i) {
     for (int i = 0; i < this->GetNumberOfIndexableFields(); ++i) {
         pVMObject vmo = (*this)[i];
@@ -147,11 +180,83 @@ void VMFrame::PrintStack() const {
         if (vmo->GetClass() == nilObject) 
             cout << "VMObject with Class == NIL_OBJECT" << endl;
         else 
-            cout << "index: " << i << " object:" 
+
+            cout << "index: " << i<<"("<<vmo<<")" << " object:"
                  << vmo->GetClass()->GetName()->GetChars() << endl;
     }
 }
+void VMFrame::PrintAllFrameStack() const {
+	VMFrame * pfrm =(VMFrame *) this;
+	pVMMethod method =  pfrm->GetMethod();
+	int index = 0;
+	while(pfrm != NULL && pfrm !=nilObject){
+		pVMClass holder = method->GetHolder();
+		char * holderclass = holder->GetClass()->GetName()->GetChars();
+		char * methodname = method->GetSignature()->GetChars();
+		//cout<<"Frame:"<<index++<<"/Holder:"<< holderclass <<"/Method:" <<methodname<<
+		cout <<"SP: " << pfrm->stackPointer->GetEmbeddedInteger() << endl;
+	   // for (int i = 0; i < this->GetNumberOfIndexableFields()+1; ++i) {
+		for (int i = 0; i < pfrm->GetNumberOfIndexableFields(); ++i) {
+			pVMObject vmo = (*pfrm)[i];
+			cout << i << ": ";
+			if (vmo == NULL)
+				cout << "NULL" << endl;
+			if (vmo == nilObject)
+				cout << "NIL_OBJECT" << endl;
+			if (vmo->GetClass() == NULL)
+				cout << "VMObject with Class == NULL" << endl;
+			if (vmo->GetClass() == nilObject)
+				cout << "VMObject with Class == NIL_OBJECT" << endl;
+			else
+				cout << "index: " << i<<"("<<vmo<<")" << " object:"
+					 << vmo->GetClass()->GetName()->GetChars() << endl;
+		}
+		pfrm = pfrm->previousFrame;
+	}
+}
 
+void VMFrame::PrintAllFrames() const {
+	VMFrame * pfrm =(VMFrame *) this;
+	pVMMethod method =  pfrm->GetMethod();
+	int idx1 = 0;
+	while(pfrm != NULL && pfrm !=nilObject){
+		pVMClass holder = method->GetHolder();
+		char * holderclass = holder->GetClass()->GetName()->GetChars();
+		char * methodname = method->GetSignature()->GetChars();
+		cout<<"Frame("<<idx1++<<")"<<pfrm<<"/Holder:"<< holderclass <<"/Method:(" <<methodname<<")"<<endl;
+		//cout <<"SP: " << pfrm->stackPointer->GetEmbeddedInteger() << endl;
+		cout<<"<<<<<<<<context<<<<<<<<"<<endl;
+		pVMFrame cntx = pfrm->GetContext();
+		int idx2 = 0;
+		while(cntx!=NULL && cntx!=nilObject){
+			pVMMethod cntxM = cntx->GetMethod();
+			pVMClass holder = cntxM->GetHolder();
+			char * holderclass = holder->GetClass()->GetName()->GetChars();
+			char * methodname = cntxM->GetSignature()->GetChars();
+			cout<<"cntxFrame("<<idx2++<<")"<<cntx<<"/Holder:"<< holderclass <<"/Method:" <<methodname<<endl;
+			cntx = cntx->GetContext();
+		}
+		cout<<">>>>>>>>>>>>>>>>"<<endl;
+	   // for (int i = 0; i < this->GetNumberOfIndexableFields()+1; ++i) {
+//		for (int i = 0; i < pfrm->GetNumberOfIndexableFields(); ++i) {
+//			pVMObject vmo = (*pfrm)[i];
+//			cout << i << ": ";
+//			if (vmo == NULL)
+//				cout << "NULL" << endl;
+//			if (vmo == nilObject)
+//				cout << "NIL_OBJECT" << endl;
+//			if (vmo->GetClass() == NULL)
+//				cout << "VMObject with Class == NULL" << endl;
+//			if (vmo->GetClass() == nilObject)
+//				cout << "VMObject with Class == NIL_OBJECT" << endl;
+//			else
+//				cout << "index: " << i<<"("<<vmo<<")" << " object:"
+//					 << vmo->GetClass()->GetName()->GetChars() << endl;
+//		}
+		pfrm = pfrm->GetPreviousFrame();
+	}
+
+}
 
 void      VMFrame::ResetStackPointer() {
     // arguments are stored in front of local variables
@@ -176,7 +281,9 @@ void      VMFrame::SetBytecodeIndex(int index) {
 
 
 pVMObject VMFrame::GetStackElement(int index) const {
+	//printf("zg.VMFrame::GetStackElement.cp0,index=%d\n",index);
     int sp = this->stackPointer->GetEmbeddedInteger();
+    //printf("zg.VMFrame::GetStackElement.cp1,sp=%d\n",sp);
     return (*this)[sp-index];
 }
 
@@ -218,7 +325,7 @@ void      VMFrame::SetArgument(int index, int contextLevel, pVMObject value) {
 void      VMFrame::PrintStackTrace() const {
     //TODO
 }
-
+//zg. This function is no use anywere?
 int       VMFrame::ArgumentStackIndex(int index) const {
     pVMMethod meth = this->GetMethod();
     return meth->GetNumberOfArguments() - index - 1;
@@ -242,3 +349,5 @@ void VMFrame::MarkReferences() {
     if (gcfield) return;
      VMArray::MarkReferences();
 }
+
+

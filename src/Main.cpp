@@ -44,10 +44,10 @@ THE SOFTWARE.
 
 int main(int argc, char** argv) {
 
-    cout << "This is SOM++.\n" << endl;
+    cout << "This is in SOMR." << endl;
 
     Universe::Start(argc, argv);
-
+    cout<<endl<<"Program done. Total GC count="<<globalGcCount<<",Total allocated objects="<<globalObjectsAllocated<<endl;
     Universe::Quit(ERR_SUCCESS);
 }
 

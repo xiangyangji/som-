@@ -67,6 +67,7 @@ void Interpreter::Start() {
         int bytecodeIndex = _FRAME->GetBytecodeIndex();
 
         pVMMethod method = this->GetMethod();
+
         uint8_t bytecode = method->GetBytecode(bytecodeIndex);
 
         int bytecodeLength = Bytecode::GetBytecodeLength(bytecode);
@@ -104,8 +105,10 @@ void Interpreter::Start() {
 
 
 pVMFrame Interpreter::PushNewFrame( pVMMethod method ) {
-    _SETFRAME(_UNIVERSE->NewFrame(_FRAME, method));
-    return _FRAME;
+    //zg. move it to the constructor of new Frame,which could avoid the nested object allocation failure issue.
+	//_SETFRAME(_UNIVERSE->NewFrame(_FRAME, method));
+	_UNIVERSE->NewFrame(_FRAME, method);
+    return _FRAME;//Here's the getFrame() is already changed by NewFrame().
 }
 
 
@@ -146,7 +149,7 @@ pVMFrame Interpreter::popFrame() {
     return result;
 }
 
-
+//From this code, looks like, current’s frame’s method’s arguments is stored in  previous frame’s sp list( sp pointed list in extra storage.)
 void Interpreter::popFrameAndPushResult( pVMObject result ) {
     pVMFrame prevFrame = this->popFrame();
 
@@ -160,11 +163,15 @@ void Interpreter::popFrameAndPushResult( pVMObject result ) {
 
 
 void Interpreter::send( pVMSymbol signature, pVMClass receiverClass) {
+	//printf("zg.Interpreter::send.cp0.signature=%s,receiverClass=%s\n",signature->GetChars(),receiverClass->GetName()->GetChars());
+
     pVMInvokable invokable = 
                 dynamic_cast<pVMInvokable>( receiverClass->LookupInvokable(signature) );
 
     if (invokable != NULL) {
+    		//printf("zg.Interpreter::send.cp1.signature=%s,receiverClass=%s\n",signature->GetChars(),receiverClass->GetName()->GetChars());
         (*invokable)(_FRAME);
+
     } else {
         //doesNotUnderstand
         int numberOfArgs = Signature::GetNumberOfArguments(signature);
@@ -185,14 +192,18 @@ void Interpreter::send( pVMSymbol signature, pVMClass receiverClass) {
         int additionalStackSlots = 3 - _FRAME->RemainingStackSize();       
         if (additionalStackSlots > 0) {
             //copy current frame into a bigger one and replace the current frame
-            this->SetFrame(VMFrame::EmergencyFrameFrom(_FRAME, additionalStackSlots));
+            //this->SetFrame(VMFrame::EmergencyFrameFrom(_FRAME, additionalStackSlots));
+        		VMFrame::EmergencyFrameFrom(_FRAME, additionalStackSlots);
         }
 
+
         receiver->Send(dnu, arguments, 2);
+    	//printf("zg.Interpreter::send.cp9.signature=%s,receiverClass=%s\n",signature->GetChars(),receiverClass->GetName()->GetChars());
+
     }
 }
 
-
+//Dup current sp pointed object into the stack, and move the sp up.
 void Interpreter::doDup() {
     pVMObject elem = _FRAME->GetStackElement(0);
     _FRAME->Push(elem);
@@ -331,8 +342,14 @@ void Interpreter::doSend( int bytecodeIndex ) {
     int numOfArgs = Signature::GetNumberOfArguments(signature);
 
     pVMObject receiver = _FRAME->GetStackElement(numOfArgs-1);
-
+    char * strPtr = signature->GetChars();
+//    printf("zg.Interpreter::doSend.cpa,frame=%p,context=%p,receiver(%p)=(%s),signature=(%s)\n"
+//    		,_FRAME,_FRAME->GetContext(),receiver,receiver->GetClass()->GetName()->GetChars(),strPtr);
+    //_FRAME->PrintStack();
+    //_FRAME->PrintAllFrameStack();
+    //printf("zg. Interpreter::doSend.cp0,receiverClass(%p)=%s\n",receiver->GetClass(),receiver->GetClass()->GetName()->GetChars());
     this->send(signature, receiver->GetClass());
+
 }
 
 

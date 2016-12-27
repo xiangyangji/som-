@@ -65,6 +65,8 @@ extern short dumpBytecodes;
 extern short gcVerbosity;
 
 //global VMObjects
+extern uint32_t globalGcCount;
+extern uint64_t globalObjectsAllocated;
 extern pVMObject nilObject;
 extern pVMObject trueObject;
 extern pVMObject falseObject;
@@ -110,7 +112,7 @@ public:
     void          Assert(bool) const;
 
     pVMSymbol     SymbolFor(const StdString&);
-    pVMSymbol     SymbolForChars(const char*);
+    pVMSymbol     SymbolForChars(const char*) const;
 
     //VMObject instanciation methods. These should probably be refactored to a new class
     pVMArray      NewArray(int) const;
@@ -126,15 +128,16 @@ public:
     pVMDouble     NewDouble(double) const;
     pVMClass      NewMetaclassClass(void) const;
     pVMString     NewString(const StdString&) const;
-    pVMSymbol     NewSymbol(const StdString&);
+    pVMSymbol     NewSymbol(const StdString&) const;
     pVMString     NewString(const char*) const;
-    pVMSymbol     NewSymbol(const char*);
-    pVMClass      NewSystemClass(void) ;
+    pVMSymbol     NewSymbol(const char*)const ;
+    //pVMClass      NewSystemClass(void) ;
+    pVMClass      NewSystemClass(  );
 
     void          InitializeSystemClass(pVMClass, pVMClass, const char*);
 
     pVMObject     GetGlobal(pVMSymbol);
-    void          SetGlobal(pVMSymbol name, pVMObject val);
+    void          SetGlobal(pVMSymbol name, pVMObject val) const;
    // bool          HasGlobal(pVMSymbol);
     pVMObject HasGlobal(pVMSymbol);
     void          InitializeGlobals();

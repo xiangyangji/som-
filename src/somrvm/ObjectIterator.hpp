@@ -38,6 +38,7 @@ protected:
 	GC_SlotObject _slotObject;	/**< Create own SlotObject class to provide output */
 	fomrobject_t *_scanPtr;			/**< current scan pointer */
 	fomrobject_t *_endPtr;			/**< end scan pointer */
+	pVMObject _obj;
 public:
 
 /* Member Functions */
@@ -47,12 +48,15 @@ private:
 	{
 		/* Start _scanPtr after header */
 		//_scanPtr = (fomrobject_t *)objectPtr + 1;
-		_scanPtr = (fomrobject_t *)((char *)objectPtr  + sizeof(VMObject) -4);		//start from FIELDS[0]
+		//_scanPtr = (fomrobject_t *)((char *)objectPtr  + sizeof(VMObject) -4);		//start from FIELDS[0]
 		//MM_GCExtensionsBase *extensions = (MM_GCExtensionsBase *)omrVM->_gcOmrVMExtensions;
 		//uintptr_t size = extensions->objectModel.getConsumedSizeInBytesWithHeader(objectPtr);
 		//printf("zg.ObjectIterator.hpp.initialize().CP0,objectPtr=%p,size=%d\n",objectPtr,size);
 		//_endPtr = (fomrobject_t *)((U_8*)objectPtr + size);  //zg. TODO: Can not use this way. For example, VMSymbol, we can not use additional data as an reference to object.
-		_endPtr = _scanPtr + ((VMObject *)objectPtr)->GetNumberOfFields();
+		////_scanPtr = (fomrobject_t *)((char *)objectPtr  + sizeof(VMObject) -4);		//start from FIELDS[0]
+		//_endPtr = _scanPtr + ((VMObject *)objectPtr)->GetNumberOfFields();
+		_obj = (VMObject *)objectPtr;
+		((VMObject * )objectPtr)->SetMarkableFieldIndex(0);  //We prefer to start from clazz, as some application class need to be kept during GC.
 	}
 /*.Here's the old code.
 		_scanPtr = (fomrobject_t *)objectPtr + 1;
@@ -71,12 +75,19 @@ public:
 	 */
 	MMINLINE GC_SlotObject *nextSlot()
 	{
-		if (_scanPtr < _endPtr) {
-			_slotObject.writeAddressToSlot(_scanPtr);
-			_scanPtr += 1;
+//		if (_scanPtr < _endPtr) {
+//			_slotObject.writeAddressToSlot(_scanPtr);
+//			_scanPtr += 1;
+//			return &_slotObject;
+//		}
+//		return NULL;
+		pVMObject po = _obj->GetNextMarkableField();
+		if (po != NULL){
+			_slotObject.writeAddressToSlot((fomrobject_t *)po);
 			return &_slotObject;
+		}else{
+			return NULL;
 		}
-		return NULL;
 	}
 
 	/**
@@ -85,7 +96,8 @@ public:
 	 */
 	MMINLINE void restore(int32_t index)
 	{
-		_scanPtr += index;
+		//_scanPtr += index;
+		_obj->SetMarkableFieldIndex(index);
 	}
 
 	/**

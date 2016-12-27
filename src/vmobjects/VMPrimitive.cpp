@@ -57,8 +57,8 @@ VMPrimitive::VMPrimitive(pVMSymbol signature) : VMInvokable(VMPrimitiveNumberOfF
     _HEAP->EndUninterruptableAllocation();
 }
 
-int       VMPrimitive::GetNumberOfMarkableFields() const
-{return GetNumberOfFields()- VMPrimitiveNumberOfFields;}
+//int       VMPrimitive::GetNumberOfMarkableFields() const
+//{return GetNumberOfFields()- VMPrimitiveNumberOfFields;}
 
 void VMPrimitive::MarkReferences() {
     if (gcfield) return;
@@ -72,6 +72,24 @@ void VMPrimitive::MarkReferences() {
         GetField(i)->MarkReferences();
     }
 }
+
+
+pVMObject       VMPrimitive::GetNextMarkableField()  {
+
+	 int fn = GetNumberOfFields();
+	 pVMObject po = NULL;
+	 //if(markablefieldindex <fn - VMPrimitiveNumberOfFields){
+	 if(markablefieldindex <fn){
+		 po =  (pVMObject) FIELDS[markablefieldindex];
+	 }
+	 else {
+		po = NULL;
+	 }
+	 markablefieldindex++;
+	 return po;
+}
+
+
 
 
 void VMPrimitive::EmptyRoutine( pVMObject _self, pVMFrame /*frame*/ ) {

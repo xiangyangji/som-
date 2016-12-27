@@ -41,7 +41,7 @@ public:
     
     inline void            SetEmbeddedInteger(int32_t);
     inline int32_t         GetEmbeddedInteger() const;
-    virtual pVMObject   GetNextMarkableField() const ;
+    virtual pVMObject   GetNextMarkableField()  ;
 private:
     int32_t embeddedInteger;
 

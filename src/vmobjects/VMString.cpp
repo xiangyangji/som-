@@ -74,7 +74,7 @@ StdString VMString::GetStdString() const {
 	return StdString(chars);
 }
 
-pVMObject       VMString::GetNextMarkableField() const {
+pVMObject       VMString::GetNextMarkableField() {
 	//For VMString objects, there's no extra fields to mark.
 	 return NULL;
 }

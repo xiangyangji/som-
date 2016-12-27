@@ -45,6 +45,6 @@ VMInteger::VMInteger(int32_t val) : VMObject(VMIntegerNumberOfFields) {
 
 
 
-pVMObject       VMInteger::GetNextMarkableField() const {
+pVMObject       VMInteger::GetNextMarkableField()  {
 	 return NULL;
 }

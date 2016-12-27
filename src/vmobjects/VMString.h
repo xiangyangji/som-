@@ -35,7 +35,7 @@ class VMString : public VMObject {
 public:
 	VMString( const char* str );
 	VMString( const StdString& s );
-	virtual pVMObject GetNextMarkableField() const;
+	virtual pVMObject GetNextMarkableField() ;
     inline char*       GetChars() const;
 	StdString GetStdString() const;
     int         GetStringLength() const;
